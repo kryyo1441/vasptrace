@@ -2,8 +2,8 @@
 // differentiator: the nearest-hop VASP isn't always the right one to route a
 // disclosure request to if it's offshore, unregistered, or unresponsive.
 // score = FIU-IND registration + India nodal officer + reliability - hops.
-import type { VaspRegistry } from "@/lib/generated/prisma/client";
-import type { TraceNode, VaspRecommendation, VaspScoreBreakdown } from "@/lib/tracers/types";
+import type { RiskLevel, VaspRegistry } from "@/lib/generated/prisma/client";
+import type { TraceNode, TypologyFlag, VaspRecommendation, VaspScoreBreakdown } from "@/lib/tracers/types";
 
 const FIUIND_WEIGHT = 3;
 const NODAL_OFFICER_WEIGHT = 2;
@@ -59,4 +59,14 @@ export function recommendVasp(
 
   candidates.sort((a, b) => b.breakdown.score - a.breakdown.score);
   return { top: candidates[0], alternatives: candidates.slice(1) };
+}
+
+// Case-level risk classification (SIH plan item 7's dashboard needs a
+// RiskLevel per case) — rule-based on the same signals typology/labeling
+// already computed, not a separate model.
+export function deriveRiskLevel(nodes: TraceNode[], typologyFlags: TypologyFlag[]): RiskLevel {
+  if (nodes.some((n) => n.kind === "DARKNET" || n.kind === "RANSOMWARE")) return "CRITICAL";
+  if (nodes.some((n) => n.kind === "MIXER") || typologyFlags.length >= 2) return "HIGH";
+  if (typologyFlags.length >= 1) return "MEDIUM";
+  return "LOW";
 }

@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 import { GraphView } from "@/components/graph-view";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
 import type { TraceGraph, TypologyFlag, VaspRecommendation } from "@/lib/tracers/types";
@@ -59,11 +60,16 @@ export default function Home() {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-8">
-      <div>
-        <h1 className="text-2xl font-semibold">VASPtrace</h1>
-        <p className="text-sm text-muted-foreground">
-          Multi-chain wallet tracer — live on Ethereum via Etherscan.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">VASPtrace</h1>
+          <p className="text-sm text-muted-foreground">
+            Multi-chain wallet tracer — live on Ethereum via Etherscan.
+          </p>
+        </div>
+        <Link href="/cases" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+          Case dashboard
+        </Link>
       </div>
 
       <Card>

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { traceEthereum } from "@/lib/tracers/ethereum";
+import { deriveRiskLevel } from "@/lib/scoring";
+import { prisma } from "@/lib/prisma";
 
 const ETH_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
@@ -32,6 +34,24 @@ export async function POST(req: NextRequest) {
 
   try {
     const graph = await traceEthereum(address, maxDepth);
+
+    // Persist every completed trace as a Case (SIH plan item 7 — dashboard
+    // needs a list of past traces, not just the live results view).
+    const typologyFlags = Array.from(new Set(graph.nodes.flatMap((n) => n.typologyFlags)));
+    await prisma.case.create({
+      data: {
+        address: graph.rootAddress,
+        chain: "ETHEREUM",
+        status: "TRACED",
+        riskLevel: deriveRiskLevel(graph.nodes, typologyFlags),
+        // VaspRegistry.name is @unique, so it doubles as a stable id here
+        // without threading vasp.id through the recommendation type.
+        recommendedVaspId: graph.recommendation?.top.vaspName ?? null,
+        traceResult: JSON.stringify(graph),
+        typologyFlags: JSON.stringify(typologyFlags),
+      },
+    });
+
     return NextResponse.json(graph);
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 502 });

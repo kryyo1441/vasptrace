@@ -1,6 +1,6 @@
 // Run: npx tsx lib/scoring.test.ts
 import assert from "node:assert";
-import { recommendVasp } from "./scoring";
+import { deriveRiskLevel, recommendVasp } from "./scoring";
 import type { TraceNode } from "./tracers/types";
 
 const node = (address: string, depth: number, entityName: string): TraceNode => ({
@@ -33,5 +33,12 @@ assert.equal(recommendVasp([{ ...nodes[0], kind: "INTERMEDIARY" }], registry), n
 
 // Unregistered VASP name (not in registry) is skipped, not crashed on.
 assert.equal(recommendVasp([node("0xunknown", 1, "SomeRandomExchange 1")], registry), null);
+
+// deriveRiskLevel — case-level classification for the dashboard.
+assert.equal(deriveRiskLevel([{ ...nodes[0], kind: "RANSOMWARE" }], []), "CRITICAL");
+assert.equal(deriveRiskLevel([{ ...nodes[0], kind: "MIXER" }], []), "HIGH");
+assert.equal(deriveRiskLevel(nodes, ["FAN_OUT", "PEEL_CHAIN"]), "HIGH");
+assert.equal(deriveRiskLevel(nodes, ["FAN_OUT"]), "MEDIUM");
+assert.equal(deriveRiskLevel(nodes, []), "LOW");
 
 console.log("scoring self-check passed");

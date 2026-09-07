@@ -14,7 +14,7 @@ history.
 | 4 | Confidence scoring (high/medium/low) | Partial — only "high" (exact label match) exists. Medium/low need clustering heuristics, not built. |
 | 5 | Graph visualization | **Done** — force-directed graph, color coding, click → detail sheet, edge tooltips. |
 | 6 | n8n workflow visualization | Not started. |
-| 7 | Case dashboard | Not started — `Case` Prisma model exists, unused. |
+| 7 | Case dashboard | **Done** — every trace persists as a `Case` (`/api/trace`), listed at `/cases` (address, chain, status, risk level, recommended VASP, date). |
 | 8 | PDF report | Not started — `@react-pdf/renderer` not installed. |
 | 9 | Mocked Sahyog routing | Not started. |
 | 10 | Typology/pattern flags | **Done** — `lib/typology.ts`, flags rendered directly on graph edges/nodes plus a summary badge row. `Case.typologyFlags` (persistence) still unused, that's item 7's job. |
@@ -42,9 +42,22 @@ auth) are all still correctly out of scope — no action needed there yet.
   larger — plus a summary badge row above the graph, per the differentiation
   note in `PLAN.md` (annotate where the pattern happens, not just a badge
   list). Self-check: `npx tsx lib/typology.test.ts`.
+- Built the case dashboard (`app/cases/page.tsx`): every successful trace
+  now persists a `Case` row from `/api/trace` (status `TRACED`, risk level,
+  recommended VASP, typology flags, full trace JSON), listed in a plain
+  HTML table (skipped `@tanstack/react-table`/shadcn DataTable — not an
+  installed dependency and a bare `<table>` covers a sort-free list, per
+  ladder rung 4). Added `deriveRiskLevel` (`lib/scoring.ts`): rule-based on
+  the same node kinds/typology flags the tracer already computes —
+  DARKNET/RANSOMWARE reached → CRITICAL, MIXER reached or ≥2 typology flags
+  → HIGH, any flag → MEDIUM, else LOW. Nav links added both ways (`/` ↔
+  `/cases`). Self-check: `npx tsx lib/scoring.test.ts`. Verified live: ran a
+  real trace against the API, confirmed the row appeared on `/cases` with
+  the correct risk badge.
 
 ## Next up
 
-Per the plan's own priority order: item 7 (case dashboard) before n8n/PDF —
-it's cheaper and still load-bearing for the demo narrative (nothing persists
-a trace as a `Case` yet, so there's no case list to demo).
+Item 6 (n8n workflow visualization) or item 8 (PDF report) — both still not
+started. Item 9 (mocked Sahyog routing) depends on the "Route disclosure
+request" action existing somewhere in the UI first; natural to build
+alongside whichever of 6/8 lands first.
