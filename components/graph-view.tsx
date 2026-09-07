@@ -2,7 +2,8 @@
 
 import { useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import type { TraceGraph, TraceNode } from "@/lib/tracers/types";
+import type { TraceGraph, TraceNode, TypologyFlag } from "@/lib/tracers/types";
+import { TYPOLOGY_LABEL } from "@/lib/typology";
 import {
   Sheet,
   SheetContent,
@@ -26,6 +27,14 @@ const NODE_COLOR: Record<TraceNode["kind"], string> = {
   UNKNOWN: "#6b7280",
 };
 
+// Distinct from NODE_COLOR so a flagged edge reads as its own signal even
+// when it touches an already-colored node (e.g. an edge into a mixer).
+const FLAG_COLOR: Record<TypologyFlag, string> = {
+  FAN_OUT: "#f59e0b", // amber
+  PEEL_CHAIN: "#9333ea", // purple
+  RAPID_MIXER_HOP: "#ea580c", // orange
+};
+
 function short(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
@@ -37,7 +46,7 @@ function formatEth(wei: string) {
 // react-force-graph-2d's node/link callback types don't survive next/dynamic's
 // generic erasure, so callbacks below are typed loosely and cast at use sites.
 type GraphNode = TraceNode & { id: string; x: number; y: number };
-type GraphLink = { source: string; target: string; label: string };
+type GraphLink = { source: string; target: string; label: string; flags: TypologyFlag[] };
 
 // Radial layout (rings by hop depth) as the starting position for each
 // node — depth is instantly readable, and it gives d3-force a sane starting
@@ -74,7 +83,11 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
     const links = graph.edges.map((e) => ({
       source: e.from,
       target: e.to,
-      label: `${formatEth(e.valueWei)} · ${e.txCount} tx · ${new Date(e.latestTimestamp * 1000).toLocaleDateString()}`,
+      label: [
+        `${formatEth(e.valueWei)} · ${e.txCount} tx · ${new Date(e.latestTimestamp * 1000).toLocaleDateString()}`,
+        ...e.typologyFlags.map((f) => TYPOLOGY_LABEL[f]),
+      ].join(" — "),
+      flags: e.typologyFlags,
     }));
 
     return { nodes, links };
@@ -86,13 +99,26 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
         ref={fgRef}
         graphData={graphData}
         nodeId="id"
-        nodeLabel={(n) => `${(n as GraphNode).entityName ?? short((n as GraphNode).address)} (${(n as GraphNode).kind})`}
+        nodeLabel={(n) => {
+          const node = n as GraphNode;
+          const base = `${node.entityName ?? short(node.address)} (${node.kind})`;
+          return node.typologyFlags.length > 0
+            ? `${base} — ${node.typologyFlags.map((f) => TYPOLOGY_LABEL[f]).join(", ")}`
+            : base;
+        }}
         nodeColor={(n) => NODE_COLOR[(n as GraphNode).kind]}
         nodeRelSize={7}
-        nodeVal={(n) => ((n as GraphNode).kind === "SUSPECT" ? 3 : 1.5)}
+        nodeVal={(n) => {
+          const node = n as GraphNode;
+          if (node.kind === "SUSPECT") return 3;
+          return node.typologyFlags.length > 0 ? 2.2 : 1.5;
+        }}
         linkLabel={(l) => (l as unknown as GraphLink).label}
-        linkWidth={1.5}
-        linkColor={() => "#9ca3af"}
+        linkWidth={(l) => ((l as unknown as GraphLink).flags.length > 0 ? 3 : 1.5)}
+        linkColor={(l) => {
+          const flags = (l as unknown as GraphLink).flags;
+          return flags.length > 0 ? FLAG_COLOR[flags[0]] : "#9ca3af";
+        }}
         linkDirectionalArrowLength={5}
         linkDirectionalArrowRelPos={1}
         onNodeClick={(n) => setSelected(n as GraphNode)}
@@ -132,6 +158,18 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
               <div>
                 <div className="text-xs text-muted-foreground">Trace stopped here</div>
                 <div className="text-sm">{selected.stopReason.replaceAll("_", " ")}</div>
+              </div>
+            )}
+            {selected && selected.typologyFlags.length > 0 && (
+              <div>
+                <div className="text-xs text-muted-foreground">Typology flags (heuristic)</div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {selected.typologyFlags.map((f) => (
+                    <Badge key={f} style={{ backgroundColor: FLAG_COLOR[f] }}>
+                      {TYPOLOGY_LABEL[f]}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             )}
           </div>
