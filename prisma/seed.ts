@@ -51,6 +51,13 @@ const labeledAddresses: {
     entityName: "Binance (cold wallet)",
     source: "Blockchair public label",
   },
+  {
+    address: "TXFBqBbqJommqZf7BV8NNYzePh97UmJodJ",
+    chain: Chain.TRON,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Bitfinex",
+    source: "Tronscan public address tag (addressTag: Bitfinex)",
+  },
   // --- Tornado Cash mixer contracts. OFAC-sanctioned 2022, delisted by
   // Treasury March 2025 — still labeled MIXER here since the tracer's job
   // is AML pattern detection, not live sanctions-list matching. ---

@@ -1,0 +1,86 @@
+{
+  "name": "VASPtrace — Tracing Pipeline (visibility layer)",
+  "nodes": [
+    {
+      "id": "webhook-trace-start",
+      "name": "Webhook: receive trace result",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vasptrace-trace",
+        "responseMode": "onReceived"
+      }
+    },
+    {
+      "id": "code-check-labeled-db",
+      "name": "Check against labeled DB",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "notes": "Real labeling already ran server-side in Next.js (lib/tracers/bfs.ts) before this webhook fired — this node mirrors that pipeline stage for demo visibility only, per PLAN.md item 6. It does not re-run the label lookup.",
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const t = $input.item.json;\nreturn {\n  json: {\n    ...t,\n    pipelineStage: \"labeled-db-checked\",\n    note: \"Labeling already happened in Next.js — this node is a visibility mirror, not the real check.\"\n  }\n};"
+      }
+    },
+    {
+      "id": "if-vasp-or-mixer",
+      "name": "Is VASP/mixer reached?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.hitVaspOrMixer }}",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "http-push-dashboard",
+      "name": "Push result to VASPtrace dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 220],
+      "notes": "Points at the local Next.js dev server. host.docker.internal requires the extra_hosts entry in docker-compose.yml (added for Linux — Docker Desktop maps it automatically).",
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/n8n/trace-ack",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "noop-no-hit",
+      "name": "No VASP/mixer reached",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [900, 400],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Webhook: receive trace result": {
+      "main": [[{ "node": "Check against labeled DB", "type": "main", "index": 0 }]]
+    },
+    "Check against labeled DB": {
+      "main": [[{ "node": "Is VASP/mixer reached?", "type": "main", "index": 0 }]]
+    },
+    "Is VASP/mixer reached?": {
+      "main": [
+        [{ "node": "Push result to VASPtrace dashboard", "type": "main", "index": 0 }],
+        [{ "node": "No VASP/mixer reached", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}

@@ -1,3 +1,5 @@
+import type { Chain } from "@/lib/generated/prisma/client";
+
 export type NodeKind =
   | "SUSPECT"
   | "INTERMEDIARY"
@@ -20,10 +22,14 @@ export interface TraceNode {
   kind: NodeKind;
   entityName?: string;
   source?: string;
-  // "high" = exact address match against the labeled-address DB. Clustering
-  // and pattern-based confidence tiers (medium/low, per the scoring spec)
-  // aren't implemented by this tracer yet — every label here is exact-match.
-  confidence: "high" | null;
+  // "high" = exact address match (LabeledAddress DB). "medium" = clustering
+  // heuristic (e.g. forwards most value to a known exchange). "low" =
+  // pattern-based guess (e.g. fan-in consolidation hub). See lib/clustering.ts.
+  confidence: "high" | "medium" | "low" | null;
+  // Human-readable basis for a medium/low confidence label — how a labeled
+  // address arrives at exact-match "high" is self-evident, so this is only
+  // populated for the inferred tiers.
+  confidenceReason?: string;
   stopReason: StopReason;
   typologyFlags: TypologyFlag[];
 }
@@ -31,6 +37,8 @@ export interface TraceNode {
 export interface TraceEdge {
   from: string;
   to: string;
+  // Smallest base unit as a decimal string — wei (Ethereum), satoshis
+  // (Bitcoin), or sun (Tron). Interpret against `TraceGraph.chain`.
   valueWei: string;
   txCount: number;
   latestTxHash: string;
@@ -56,7 +64,7 @@ export interface VaspRecommendation {
 
 export interface TraceGraph {
   rootAddress: string;
-  chain: "ETHEREUM";
+  chain: Chain;
   maxDepth: number;
   nodes: TraceNode[];
   edges: TraceEdge[];

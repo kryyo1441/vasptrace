@@ -1,0 +1,55 @@
+{
+  "name": "VASPtrace — Sahyog Mock Routing",
+  "nodes": [
+    {
+      "id": "webhook-sahyog-start",
+      "name": "Webhook: receive disclosure request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vasptrace-sahyog",
+        "responseMode": "onReceived"
+      }
+    },
+    {
+      "id": "code-format-request",
+      "name": "Format disclosure request (simulated)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "notes": "SIH plan item 9 — Sahyog API access isn't publicly available. This node just annotates the already-built simulated payload (built server-side in app/api/cases/[id]/sahyog/route.ts) as it flows across the canvas for the demo.",
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const p = $input.item.json;\nreturn {\n  json: {\n    ...p,\n    routedVia: \"n8n mock workflow (no real Sahyog endpoint exists)\"\n  }\n};"
+      }
+    },
+    {
+      "id": "http-route-sahyog-mock",
+      "name": "Route to Sahyog (mocked)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300],
+      "notes": "Hits VASPtrace's own local ack endpoint, not a real Sahyog API — nothing leaves the local system. See docs/ARCHITECTURE.md.",
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/n8n/sahyog-ack",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook: receive disclosure request": {
+      "main": [[{ "node": "Format disclosure request (simulated)", "type": "main", "index": 0 }]]
+    },
+    "Format disclosure request (simulated)": {
+      "main": [[{ "node": "Route to Sahyog (mocked)", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}
