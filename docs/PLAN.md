@@ -149,3 +149,68 @@ visible on screen (not just a "HIGH risk" badge) so it reads as explainable
 rather than a black box. Same applies to item 10 (typology flags) — put them
 on the graph itself where the pattern actually happens, not only as a
 case-level badge list.
+
+## Day-by-day schedule (added end of day 1)
+
+The original brief didn't split the 10 core items across the 5 days — it
+just gave a priority order and said "prioritize a working core demo over
+completeness." All 10 items ended up shipping on day 1 (see
+[`PROGRESS.md`](./PROGRESS.md) for the detailed changelog), which changes
+what days 2-5 are for: not building the remaining scope, since there isn't
+any, but making what exists demo-proof. This section is a schedule, not new
+scope — priority order above still governs if anything has to be cut.
+
+**Day 1 — done.** All 10 core items (multi-chain tracer incl. Bitcoin/Tron,
+labeled DB, legal-actionability scoring, confidence tiers, graph
+visualization, n8n visibility layer, case dashboard + detail pages, PDF
+report, mocked Sahyog routing, typology flags). Status/detail in
+`PROGRESS.md`.
+
+**Day 2 — Hardening & demo-safety.**
+- Live-demo risk: the whole tracer depends on Etherscan/Blockstream/Tronscan
+  being reachable and not rate-limited *at judging time*. Pre-run and cache
+  (or just write down) 2-3 known-good demo addresses per chain so a flaky
+  API or venue wifi doesn't sink the live demo — have a fallback path that
+  doesn't require live API calls if it comes to that.
+- Expand seed data breadth (more labeled addresses, more VASPs) so a wider
+  range of addresses land on a label during a live trace instead of running
+  out to `MAX_DEPTH`/`NODE_BUDGET` with nothing to show.
+- Validate the confidence-clustering thresholds (80% forward ratio, ≥3
+  fan-in senders — `lib/clustering.ts`) against a handful more real traces;
+  they were tuned on a small sample.
+- Etherscan/Blockstream/Tronscan pacing is a fixed delay, not real
+  rate-limit tracking (`ponytail:` comments in each tracer) — fine at demo
+  volume, worth a sanity check under repeated back-to-back trace runs.
+
+**Day 3 — n8n live rehearsal + UI/UX polish.**
+- The one item shipped without live verification: actually
+  `docker compose up`, import both `n8n/workflows/*.json` files, activate
+  them, wire `.env`, and confirm the canvas visibly executes during a real
+  trace and a real Sahyog-routing click. Everything else about item 6 was
+  verified except this.
+- UI polish pass: loading/empty states, mobile responsiveness, basic
+  accessibility (contrast, labels) — none of this was checked, only the
+  functional paths were.
+- PDF report visual polish — functionally correct and legible already, room
+  for letterhead/branding treatment.
+
+**Day 4 — Full dry-run + bug bash.**
+- Rehearse the exact judge-facing path end to end: paste address → live
+  trace → graph → n8n canvas executing → scoring/recommendation → generate
+  PDF → mock-route to VASP via n8n. Time it.
+- Throw adversarial input at it: addresses with zero labeled hits, max
+  depth 10, invalid/malformed addresses per chain, a trace that never
+  reaches any exchange (no recommendation) — confirm every case degrades
+  to a clear UI state, not a blank page or unhandled error.
+- Fix whatever the bug bash turns up.
+
+**Day 5 — Buffer + pitch.**
+- Buffer for day 4's fallout.
+- `docs/ARCHITECTURE.md` is written to be pitch-deck-liftable
+  (deliverable 5) — do the actual lift and rehearse the narrative,
+  especially the item-3 differentiation story (`Differentiation note`
+  above) and the n8n-as-visibility-layer framing (not a fragile
+  single point of failure — see `ARCHITECTURE.md`).
+
+Out-of-scope items (bridge correlation, `confirmedByVaspResponse`, auth)
+stay out of scope through day 5 unless everything above finishes early.
