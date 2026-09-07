@@ -13,7 +13,17 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { GraphView } from "@/components/graph-view";
-import type { TraceGraph } from "@/lib/tracers/types";
+import { TYPOLOGY_LABEL } from "@/lib/typology";
+import type { TraceGraph, TypologyFlag, VaspRecommendation } from "@/lib/tracers/types";
+
+function vaspLine(rec: VaspRecommendation) {
+  const b = rec.breakdown;
+  return `${rec.vaspName} — ${b.hopDistance} hop${b.hopDistance === 1 ? "" : "s"} · ${
+    b.fiuindRegistered ? "FIU-IND registered" : "not FIU-IND registered"
+  } · ${b.hasIndiaNodalOfficer ? "India nodal officer" : "no India nodal officer"} · reliability ${
+    b.responseReliabilityScore
+  }/5 · score ${b.score}`;
+}
 
 export default function Home() {
   const [address, setAddress] = useState("");
@@ -22,6 +32,10 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [graph, setGraph] = useState<TraceGraph | null>(null);
+
+  const typologyFlags: TypologyFlag[] = graph
+    ? Array.from(new Set(graph.nodes.flatMap((n) => n.typologyFlags)))
+    : [];
 
   async function runTrace() {
     setLoading(true);
@@ -109,6 +123,16 @@ export default function Home() {
             </div>
           </CardHeader>
           <CardContent>
+            {typologyFlags.length > 0 && (
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">Typology flags (rule-based heuristics):</span>
+                {typologyFlags.map((f) => (
+                  <Badge key={f} variant="secondary">
+                    {TYPOLOGY_LABEL[f]}
+                  </Badge>
+                ))}
+              </div>
+            )}
             {graph.warnings.length > 0 && (
               <div className="mb-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-xs text-yellow-700 dark:text-yellow-400">
                 {graph.warnings.map((w, i) => (
@@ -117,6 +141,26 @@ export default function Home() {
               </div>
             )}
             <GraphView graph={graph} />
+          </CardContent>
+        </Card>
+      )}
+
+      {graph?.recommendation && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Recommended VASP for disclosure request
+              {graph.recommendation.alternatives.length > 0 &&
+                ` — ${graph.recommendation.top.vaspName} over ${graph.recommendation.alternatives[0].vaspName}`}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 text-sm">
+            <p className="font-medium text-foreground">{vaspLine(graph.recommendation.top)}</p>
+            {graph.recommendation.alternatives.map((alt) => (
+              <p key={alt.address} className="text-muted-foreground">
+                {vaspLine(alt)}
+              </p>
+            ))}
           </CardContent>
         </Card>
       )}
