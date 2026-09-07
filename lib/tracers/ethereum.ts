@@ -1,6 +1,8 @@
 // LIVE: traces real on-chain Ethereum transfers via Etherscan, hop by hop.
 import { prisma } from "@/lib/prisma";
 import { getOutgoingTransactions } from "@/lib/etherscan";
+import { recommendVasp } from "@/lib/scoring";
+import { applyTypologyFlags } from "@/lib/typology";
 import type { NodeKind, TraceEdge, TraceGraph, TraceNode } from "@/lib/tracers/types";
 
 // ponytail: fixed caps instead of adaptive backpressure. A wallet with
@@ -34,6 +36,7 @@ export async function traceEthereum(rootAddress: string, maxDepth: number): Prom
     kind: "SUSPECT",
     confidence: null,
     stopReason: null,
+    typologyFlags: [],
   });
 
   const queue: { address: string; depth: number }[] = [{ address: root, depth: 0 }];
@@ -90,6 +93,7 @@ export async function traceEthereum(rootAddress: string, maxDepth: number): Prom
         txCount: agg.txCount,
         latestTxHash: agg.latestTxHash,
         latestTimestamp: agg.latestTimestamp,
+        typologyFlags: [],
       });
 
       if (!nodes.has(to) && nodes.size < NODE_BUDGET) {
@@ -103,6 +107,7 @@ export async function traceEthereum(rootAddress: string, maxDepth: number): Prom
           source: label?.source,
           confidence: label ? "high" : null,
           stopReason: label ? "LABEL_MATCH" : null,
+          typologyFlags: [],
         });
         queue.push({ address: to, depth: depth + 1 });
       }
@@ -113,12 +118,17 @@ export async function traceEthereum(rootAddress: string, maxDepth: number): Prom
     warnings.push(`Node budget (${NODE_BUDGET}) reached — trace truncated before completing all branches.`);
   }
 
+  const vaspRegistry = await prisma.vaspRegistry.findMany();
+  const nodeList = [...nodes.values()];
+  applyTypologyFlags(nodeList, edges);
+
   return {
     rootAddress: root,
     chain: "ETHEREUM",
     maxDepth,
-    nodes: [...nodes.values()],
+    nodes: nodeList,
     edges,
     warnings,
+    recommendation: recommendVasp(nodeList, vaspRegistry),
   };
 }
