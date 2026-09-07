@@ -1,0 +1,78 @@
+// Prisma schema for VASPtrace — SQLite for easy local seed/inspect.
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Chain {
+  BITCOIN
+  ETHEREUM
+  TRON
+}
+
+enum LabelType {
+  EXCHANGE
+  MIXER
+  DARKNET
+  RANSOMWARE
+  BRIDGE
+  UNKNOWN
+}
+
+// Real seed data: known exchange hot wallets, OFAC SDN crypto addresses,
+// known mixer addresses (Tornado Cash, ChipMixer). See prisma/seed.ts.
+model LabeledAddress {
+  id         String    @id @default(cuid())
+  address    String
+  chain      Chain
+  labelType  LabelType
+  entityName String
+  source     String
+
+  @@unique([address, chain])
+  @@index([address])
+}
+
+// Real seed data: FIU-IND registered VASP status per public info.
+// Used by the legal-actionability scoring in lib/scoring.ts.
+model VaspRegistry {
+  id                       String  @id @default(cuid())
+  name                     String  @unique
+  fiuindRegistered         Boolean
+  hasIndiaNodalOfficer     Boolean
+  responseReliabilityScore Int // 1-5
+}
+
+enum CaseStatus {
+  OPEN
+  TRACED
+  ROUTED
+  CLOSED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Case {
+  id                 String     @id @default(cuid())
+  address            String
+  chain              Chain
+  status             CaseStatus @default(OPEN)
+  riskLevel          RiskLevel?
+  recommendedVaspId  String?
+  traceResult        String? // JSON blob: full graph (nodes/edges) from the last trace
+  typologyFlags      String? // JSON array of detected pattern names
+  // Roadmap only, unused: would flip once a VASP confirms/denies a disclosure
+  // request back through a real Sahyog integration.
+  confirmedByVaspResponse Boolean @default(false)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+}

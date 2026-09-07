@@ -1,0 +1,125 @@
+"use client";
+
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { GraphView } from "@/components/graph-view";
+import type { TraceGraph } from "@/lib/tracers/types";
+
+export default function Home() {
+  const [address, setAddress] = useState("");
+  const [chain, setChain] = useState("ETHEREUM");
+  const [maxDepth, setMaxDepth] = useState(5);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [graph, setGraph] = useState<TraceGraph | null>(null);
+
+  async function runTrace() {
+    setLoading(true);
+    setError(null);
+    setGraph(null);
+    try {
+      const res = await fetch("/api/trace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: address.trim(), chain, maxDepth }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Trace failed");
+      setGraph(data);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto flex max-w-5xl flex-col gap-6 p-8">
+      <div>
+        <h1 className="text-2xl font-semibold">VASPtrace</h1>
+        <p className="text-sm text-muted-foreground">
+          Multi-chain wallet tracer — live on Ethereum via Etherscan.
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">New trace</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row">
+            <Input
+              placeholder="0x… wallet address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className="font-mono"
+            />
+            <Select value={chain} onValueChange={(v) => v && setChain(v)}>
+              <SelectTrigger className="w-full sm:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ETHEREUM">Ethereum</SelectItem>
+                <SelectItem value="BITCOIN" disabled>
+                  Bitcoin (soon)
+                </SelectItem>
+                <SelectItem value="TRON" disabled>
+                  Tron (soon)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="number"
+              min={1}
+              max={10}
+              value={maxDepth}
+              onChange={(e) => setMaxDepth(Number(e.target.value))}
+              className="w-full sm:w-24"
+            />
+          </div>
+          <Button onClick={runTrace} disabled={!address || loading} className="w-fit">
+            {loading ? "Tracing…" : "Run trace"}
+          </Button>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </CardContent>
+      </Card>
+
+      {graph && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">
+              Trace result — {graph.nodes.length} addresses, {graph.edges.length} transfers
+            </CardTitle>
+            <div className="flex gap-2 text-xs text-muted-foreground">
+              <Badge variant="outline" style={{ borderColor: "#dc2626", color: "#dc2626" }}>Suspect</Badge>
+              <Badge variant="outline" style={{ borderColor: "#6b7280", color: "#6b7280" }}>Intermediary</Badge>
+              <Badge variant="outline" style={{ borderColor: "#16a34a", color: "#16a34a" }}>Exchange</Badge>
+              <Badge variant="outline" style={{ borderColor: "#ea580c", color: "#ea580c" }}>Mixer</Badge>
+              <Badge variant="outline" style={{ borderColor: "#7f1d1d", color: "#7f1d1d" }}>Darknet/Ransomware</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {graph.warnings.length > 0 && (
+              <div className="mb-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-xs text-yellow-700 dark:text-yellow-400">
+                {graph.warnings.map((w, i) => (
+                  <div key={i}>{w}</div>
+                ))}
+              </div>
+            )}
+            <GraphView graph={graph} />
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
