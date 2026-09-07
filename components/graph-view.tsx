@@ -12,6 +12,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import type { Chain } from "@/lib/generated/prisma/client";
 
 // react-force-graph-2d touches window/canvas at import time — must load client-only.
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
@@ -39,8 +40,18 @@ function short(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-function formatEth(wei: string) {
-  return `${(Number(BigInt(wei)) / 1e18).toFixed(4)} ETH`;
+// TraceEdge.valueWei is the smallest base unit for whichever chain the
+// trace ran on (wei / satoshis / sun) — divisor+symbol keyed off it here
+// rather than renaming the field across every file that touches it.
+const CHAIN_UNIT: Record<Chain, { symbol: string; decimals: number }> = {
+  ETHEREUM: { symbol: "ETH", decimals: 18 },
+  BITCOIN: { symbol: "BTC", decimals: 8 },
+  TRON: { symbol: "TRX", decimals: 6 },
+};
+
+function formatValue(baseUnits: string, chain: Chain) {
+  const { symbol, decimals } = CHAIN_UNIT[chain];
+  return `${(Number(BigInt(baseUnits)) / 10 ** decimals).toFixed(4)} ${symbol}`;
 }
 
 // react-force-graph-2d's node/link callback types don't survive next/dynamic's
@@ -84,7 +95,7 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
       source: e.from,
       target: e.to,
       label: [
-        `${formatEth(e.valueWei)} · ${e.txCount} tx · ${new Date(e.latestTimestamp * 1000).toLocaleDateString()}`,
+        `${formatValue(e.valueWei, graph.chain)} · ${e.txCount} tx · ${new Date(e.latestTimestamp * 1000).toLocaleDateString()}`,
         ...e.typologyFlags.map((f) => TYPOLOGY_LABEL[f]),
       ].join(" — "),
       flags: e.typologyFlags,
@@ -145,7 +156,10 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
             {selected?.confidence && (
               <div>
                 <div className="text-xs text-muted-foreground">Confidence</div>
-                <div className="text-sm">{selected.confidence} (exact address match)</div>
+                <div className="text-sm capitalize">{selected.confidence}</div>
+                <div className="text-xs text-muted-foreground">
+                  {selected.confidenceReason ?? "Exact address match against the labeled-address DB"}
+                </div>
               </div>
             )}
             {selected?.source && (
