@@ -9,10 +9,11 @@ const FIUIND_WEIGHT = 3;
 const NODAL_OFFICER_WEIGHT = 2;
 const HOP_PENALTY = 1;
 
-// ponytail: no separate confidence multiplier. Every node reaching this
-// scorer is an exact LabeledAddress match — the only confidence tier the
-// tracer currently produces (see types.ts) — so a multiplier would always
-// be 1. Add one back once clustering-based medium/low labels exist.
+// Only exact-match (high confidence) nodes can be routed to — a clustering
+// guess or pattern-based guess (medium/low, lib/clustering.ts) is useful for
+// investigator attention but isn't solid enough ground for an actual legal
+// disclosure request. Filtered in recommendVasp below, not scored with a
+// multiplier, so a medium/low guess can never outrank an exact match.
 
 // LabeledAddress.entityName is free text like "Binance 14" / "Coinbase 1" /
 // "Binance (cold wallet)"; VaspRegistry keys on the bare name, so match on
@@ -44,7 +45,7 @@ export function recommendVasp(
 
   const candidates: VaspRecommendation[] = [];
   for (const node of nodes) {
-    if (node.kind !== "EXCHANGE" || !node.entityName) continue;
+    if (node.kind !== "EXCHANGE" || node.confidence !== "high" || !node.entityName) continue;
     const vasp = registryByName.get(registryNameFor(node.entityName));
     if (!vasp) continue;
     candidates.push({

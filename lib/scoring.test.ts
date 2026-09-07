@@ -34,6 +34,13 @@ assert.equal(recommendVasp([{ ...nodes[0], kind: "INTERMEDIARY" }], registry), n
 // Unregistered VASP name (not in registry) is skipped, not crashed on.
 assert.equal(recommendVasp([node("0xunknown", 1, "SomeRandomExchange 1")], registry), null);
 
+// A medium/low-confidence guess must never enter the recommendation, even if
+// labeled EXCHANGE — routing a disclosure request needs an exact match.
+assert.equal(
+  recommendVasp([{ ...node("0xguess", 1, "Binance 14"), confidence: "medium" }], registry),
+  null
+);
+
 // deriveRiskLevel — case-level classification for the dashboard.
 assert.equal(deriveRiskLevel([{ ...nodes[0], kind: "RANSOMWARE" }], []), "CRITICAL");
 assert.equal(deriveRiskLevel([{ ...nodes[0], kind: "MIXER" }], []), "HIGH");
