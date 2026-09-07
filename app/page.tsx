@@ -15,16 +15,14 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { GraphView } from "@/components/graph-view";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
-import type { TraceGraph, TypologyFlag, VaspRecommendation } from "@/lib/tracers/types";
+import { vaspLine } from "@/lib/format";
+import type { TraceGraph, TypologyFlag } from "@/lib/tracers/types";
 
-function vaspLine(rec: VaspRecommendation) {
-  const b = rec.breakdown;
-  return `${rec.vaspName} — ${b.hopDistance} hop${b.hopDistance === 1 ? "" : "s"} · ${
-    b.fiuindRegistered ? "FIU-IND registered" : "not FIU-IND registered"
-  } · ${b.hasIndiaNodalOfficer ? "India nodal officer" : "no India nodal officer"} · reliability ${
-    b.responseReliabilityScore
-  }/5 · score ${b.score}`;
-}
+const ADDRESS_PLACEHOLDER: Record<string, string> = {
+  ETHEREUM: "0x… wallet address",
+  BITCOIN: "1…/3…/bc1… wallet address",
+  TRON: "T… wallet address",
+};
 
 export default function Home() {
   const [address, setAddress] = useState("");
@@ -33,6 +31,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [graph, setGraph] = useState<TraceGraph | null>(null);
+  const [caseId, setCaseId] = useState<string | null>(null);
 
   const typologyFlags: TypologyFlag[] = graph
     ? Array.from(new Set(graph.nodes.flatMap((n) => n.typologyFlags)))
@@ -51,6 +50,7 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Trace failed");
       setGraph(data);
+      setCaseId(data.caseId ?? null);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -64,7 +64,7 @@ export default function Home() {
         <div>
           <h1 className="text-2xl font-semibold">VASPtrace</h1>
           <p className="text-sm text-muted-foreground">
-            Multi-chain wallet tracer — live on Ethereum via Etherscan.
+            Multi-chain wallet tracer — live on Ethereum, Bitcoin, and Tron.
           </p>
         </div>
         <Link href="/cases" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
@@ -79,7 +79,7 @@ export default function Home() {
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-4 sm:flex-row">
             <Input
-              placeholder="0x… wallet address"
+              placeholder={ADDRESS_PLACEHOLDER[chain]}
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               className="font-mono"
@@ -90,12 +90,8 @@ export default function Home() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ETHEREUM">Ethereum</SelectItem>
-                <SelectItem value="BITCOIN" disabled>
-                  Bitcoin (soon)
-                </SelectItem>
-                <SelectItem value="TRON" disabled>
-                  Tron (soon)
-                </SelectItem>
+                <SelectItem value="BITCOIN">Bitcoin</SelectItem>
+                <SelectItem value="TRON">Tron</SelectItem>
               </SelectContent>
             </Select>
             <Input
@@ -117,9 +113,16 @@ export default function Home() {
       {graph && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">
-              Trace result — {graph.nodes.length} addresses, {graph.edges.length} transfers
-            </CardTitle>
+            <div>
+              <CardTitle className="text-base">
+                Trace result — {graph.nodes.length} addresses, {graph.edges.length} transfers
+              </CardTitle>
+              {caseId && (
+                <Link href={`/cases/${caseId}`} className="text-xs text-primary underline-offset-4 hover:underline">
+                  Open case, generate report, route disclosure request →
+                </Link>
+              )}
+            </div>
             <div className="flex gap-2 text-xs text-muted-foreground">
               <Badge variant="outline" style={{ borderColor: "#dc2626", color: "#dc2626" }}>Suspect</Badge>
               <Badge variant="outline" style={{ borderColor: "#6b7280", color: "#6b7280" }}>Intermediary</Badge>
