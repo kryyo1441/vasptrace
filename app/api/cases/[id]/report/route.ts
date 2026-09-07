@@ -1,0 +1,25 @@
+import { renderToBuffer } from "@react-pdf/renderer";
+import { prisma } from "@/lib/prisma";
+import { CaseReportDocument } from "@/lib/pdf/report";
+import type { TraceGraph } from "@/lib/tracers/types";
+
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const kase = await prisma.case.findUnique({ where: { id } });
+  if (!kase) {
+    return new Response("Case not found", { status: 404 });
+  }
+  if (!kase.traceResult) {
+    return new Response("No trace data stored for this case", { status: 400 });
+  }
+
+  const graph = JSON.parse(kase.traceResult) as TraceGraph;
+  const buffer = await renderToBuffer(CaseReportDocument({ kase, graph }));
+
+  return new Response(new Uint8Array(buffer), {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="vasptrace-case-${kase.id}.pdf"`,
+    },
+  });
+}
