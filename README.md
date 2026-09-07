@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# VASPtrace
 
-## Getting Started
+Blockchain intelligence platform for tracing suspect crypto wallets to the
+nearest legally-actionable VASP/exchange. Built for Smart India Hackathon,
+problem statement 26182 (MHA / I4C).
 
-First, run the development server:
+See [`docs/PLAN.md`](./docs/PLAN.md) for the full brief,
+[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for how it's built and
+what's live vs. simulated, and [`docs/PROGRESS.md`](./docs/PROGRESS.md) for
+current status.
+
+## Setup
 
 ```bash
+npm install
+cp .env.example .env   # fill in ETHERSCAN_API_KEY at minimum — get one free at etherscan.io/apis
+npx prisma migrate dev # creates dev.db and applies prisma/migrations
+npm run db:seed        # loads real labeled addresses + VASP registry
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). Paste a wallet address,
+pick a chain (Ethereum, Bitcoin, or Tron all trace live), run a trace.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+`TRONSCAN_API_KEY` in `.env.example` is optional — the Tron tracer works
+keyless at demo volume.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## n8n (optional)
 
-## Learn More
+The workflow-visualization layer (see `docs/ARCHITECTURE.md`) is entirely
+optional — the app is fully functional without it. To wire it up:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+docker compose up -d
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Open `http://localhost:5678`, import `n8n/workflows/tracing-pipeline.json`
+and `n8n/workflows/sahyog-mock-routing.json`, activate both, and copy each
+Webhook node's Production URL into `.env` as `N8N_TRACE_WEBHOOK_URL` /
+`N8N_SAHYOG_WEBHOOK_URL`. Restart `npm run dev` to pick up the new env vars.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Tests
 
-## Deploy on Vercel
+Each non-trivial module has a small `assert`-based self-check, no test
+framework:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npx tsx lib/scoring.test.ts
+npx tsx lib/typology.test.ts
+npx tsx lib/clustering.test.ts
+```
