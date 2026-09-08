@@ -181,6 +181,23 @@ report, mocked Sahyog routing, typology flags). Status/detail in
 - Etherscan/Blockstream/Tronscan pacing is a fixed delay, not real
   rate-limit tracking (`ponytail:` comments in each tracer) — fine at demo
   volume, worth a sanity check under repeated back-to-back trace runs.
+- **UI redesign — current look is default-shadcn-plain, needs to read as a
+  premium investigative tool, not a scaffold.** Direction: monochrome
+  black/white base (Apple-esque — high contrast, generous whitespace, bold
+  large type for headings/numbers) with glassmorphism accents (frosted
+  `backdrop-blur` cards/panels, translucent layered surfaces, thin
+  hairline borders) rather than flat shadcn Card boxes everywhere. Swap
+  every plain-text/emoji-ish UI marker for a real `lucide-react` icon
+  (already a dependency — wallet, shield, alert-triangle, network, file-text,
+  send, etc. for suspect/risk/graph/report/routing actions). Keep the
+  *functional* colors — risk-level badges (green/amber/orange/red) and
+  node-kind colors on the graph (`components/graph-view.tsx`'s
+  `NODE_COLOR`/`RISK_COLOR` maps) — those carry real meaning (risk,
+  entity type) and shouldn't get flattened into the monochrome scheme;
+  everything else (chrome, cards, nav, buttons, backgrounds) moves to
+  black/white/glass. Touches `app/globals.css` (theme tokens), every page
+  (`app/page.tsx`, `app/cases/page.tsx`, `app/cases/[id]/page.tsx`), and
+  the shadcn primitives in `components/ui/*`.
 
 **Day 3 — n8n live rehearsal + UI/UX polish.**
 - The one item shipped without live verification: actually
