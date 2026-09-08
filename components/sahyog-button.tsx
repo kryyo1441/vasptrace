@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Send } from "lucide-react";
 
 export function SahyogButton({
   caseId,
@@ -41,6 +42,7 @@ export function SahyogButton({
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <Button onClick={route} disabled={loading} variant={routed ? "outline" : "default"}>
+          <Send className="size-4" />
           {loading ? "Routing…" : routed ? `Re-route to ${vaspName}` : `Route disclosure request to ${vaspName}`}
         </Button>
         <Badge variant="outline" className="border-amber-600 text-amber-600">
@@ -50,7 +52,7 @@ export function SahyogButton({
       {error && <p className="text-sm text-destructive">{error}</p>}
       {warning && <p className="text-sm text-muted-foreground">{warning}</p>}
       {payload !== null && (
-        <pre className="max-h-64 overflow-auto rounded-md border bg-muted p-3 text-xs">{JSON.stringify(payload, null, 2)}</pre>
+        <pre className="glass-panel max-h-64 overflow-auto p-3 text-xs">{JSON.stringify(payload, null, 2)}</pre>
       )}
     </div>
   );

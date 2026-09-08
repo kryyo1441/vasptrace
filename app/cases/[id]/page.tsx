@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
 import { vaspLine } from "@/lib/format";
 import type { TraceGraph } from "@/lib/tracers/types";
+import { AlertTriangle, ArrowLeft, FileText, Network, Shield, Wallet } from "lucide-react";
 
 const RISK_COLOR: Record<string, string> = {
   LOW: "#16a34a",
@@ -28,10 +29,17 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-8">
       <div className="flex items-center justify-between">
         <div>
-          <Link href="/cases" className="text-xs text-muted-foreground underline-offset-4 hover:underline">
-            ← Case dashboard
+          <Link
+            href="/cases"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:underline"
+          >
+            <ArrowLeft className="size-3" />
+            Case dashboard
           </Link>
-          <h1 className="mt-1 font-mono text-lg font-semibold break-all">{kase.address}</h1>
+          <h1 className="mt-1 flex items-center gap-2 font-mono text-lg font-semibold break-all">
+            <Wallet className="size-4 shrink-0 text-muted-foreground" />
+            {kase.address}
+          </h1>
           <p className="text-sm text-muted-foreground">
             {kase.chain} · opened {kase.createdAt.toLocaleString()}
           </p>
@@ -46,8 +54,9 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           {graph && (
             <a
               href={`/api/cases/${kase.id}/report`}
-              className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-accent"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium backdrop-blur-xl hover:bg-accent"
             >
+              <FileText className="size-4" />
               Download PDF report
             </a>
           )}
@@ -56,7 +65,10 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
 
       {typologyFlags.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground">Typology flags (rule-based heuristics):</span>
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+            <AlertTriangle className="size-3.5" />
+            Typology flags (rule-based heuristics):
+          </span>
           {typologyFlags.map((f) => (
             <Badge key={f} variant="secondary">
               {TYPOLOGY_LABEL[f as keyof typeof TYPOLOGY_LABEL] ?? f}
@@ -68,7 +80,8 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
       {graph ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Network className="size-4 text-muted-foreground" />
               Trace graph — {graph.nodes.length} addresses, {graph.edges.length} transfers
             </CardTitle>
           </CardHeader>
@@ -83,7 +96,10 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
       {graph?.recommendation && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Recommended VASP for disclosure request</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Shield className="size-4 text-muted-foreground" />
+              Recommended VASP for disclosure request
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex flex-col gap-2 text-sm">

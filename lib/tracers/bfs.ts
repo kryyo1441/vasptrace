@@ -16,8 +16,6 @@ import type { NodeKind, TraceEdge, TraceGraph, TraceNode } from "./types";
 const FANOUT_CAP = 5;
 const NODE_BUDGET = 60;
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 // One outgoing transfer as reported by a chain-specific API client, before
 // aggregation by destination.
 export interface RawTransfer {
@@ -33,7 +31,6 @@ export interface ChainAdapter {
   // addresses aren't, so its adapter normalizes to lowercase.
   normalize: (address: string) => string;
   fetchOutgoing: (address: string) => Promise<RawTransfer[]>;
-  pacingMs: number;
 }
 
 export async function traceChain(adapter: ChainAdapter, rootAddress: string, maxDepth: number): Promise<TraceGraph> {
@@ -69,7 +66,9 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
 
     let transfers: RawTransfer[];
     try {
-      if (nodes.size > 1) await sleep(adapter.pacingMs);
+      // API pacing (rate-limit safety) lives in each chain's API client
+      // (lib/etherscan.ts etc, via lib/rateLimit.ts) — global per-process,
+      // not per-trace, so it also holds up under concurrent traces.
       transfers = await adapter.fetchOutgoing(address);
     } catch (err) {
       node.stopReason = "API_ERROR";

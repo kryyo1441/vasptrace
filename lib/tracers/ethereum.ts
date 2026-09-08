@@ -5,17 +5,11 @@ import type { TraceGraph } from "./types";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-// ponytail: fixed delay instead of tracking Etherscan's actual rate-limit
-// window. Free-tier keys throttle bursty sequential calls; this is cheaper
-// than a token-bucket for a demo trace. Remove/tune if a paid key is used.
-const API_PACING_MS = 250;
-
 export async function traceEthereum(rootAddress: string, maxDepth: number): Promise<TraceGraph> {
   return traceChain(
     {
       chain: "ETHEREUM",
       normalize: (a) => a.toLowerCase(),
-      pacingMs: API_PACING_MS,
       fetchOutgoing: async (address) => {
         const txs = await getOutgoingTransactions(address);
         return txs

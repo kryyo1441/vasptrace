@@ -7,7 +7,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -49,24 +49,26 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  /* Monochrome, high-contrast base (Apple-esque) with a soft off-white
+     canvas so translucent glass cards read as a distinct layer above it. */
+  --background: oklch(0.965 0 0);
+  --foreground: oklch(0.13 0 0);
+  --card: oklch(1 0 0 / 60%);
+  --card-foreground: oklch(0.13 0 0);
+  --popover: oklch(1 0 0 / 80%);
+  --popover-foreground: oklch(0.13 0 0);
+  --primary: oklch(0.12 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.94 0 0 / 70%);
+  --secondary-foreground: oklch(0.15 0 0);
+  --muted: oklch(0.94 0 0 / 55%);
+  --muted-foreground: oklch(0.45 0 0);
+  --accent: oklch(0.94 0 0 / 65%);
+  --accent-foreground: oklch(0.15 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: oklch(0.85 0 0 / 55%);
+  --input: oklch(0.85 0 0 / 45%);
+  --ring: oklch(0.5 0 0 / 40%);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -84,24 +86,24 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.08 0 0);
+  --foreground: oklch(0.98 0 0);
+  --card: oklch(1 0 0 / 5%);
+  --card-foreground: oklch(0.98 0 0);
+  --popover: oklch(1 0 0 / 8%);
+  --popover-foreground: oklch(0.98 0 0);
+  --primary: oklch(0.98 0 0);
+  --primary-foreground: oklch(0.1 0 0);
+  --secondary: oklch(1 0 0 / 8%);
+  --secondary-foreground: oklch(0.98 0 0);
+  --muted: oklch(1 0 0 / 6%);
+  --muted-foreground: oklch(0.65 0 0);
+  --accent: oklch(1 0 0 / 8%);
+  --accent-foreground: oklch(0.98 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(1 0 0 / 30%);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -123,8 +125,31 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Soft grayscale depth so translucent glass cards (backdrop-blur) have
+       something real behind them to blur — flat white/black gives blur
+       nothing to do and the glassmorphism reads as a plain flat panel. */
+    background-image:
+      radial-gradient(ellipse 60% 50% at 15% -10%, oklch(0 0 0 / 6%), transparent),
+      radial-gradient(ellipse 50% 40% at 100% 0%, oklch(0 0 0 / 5%), transparent),
+      radial-gradient(ellipse 60% 50% at 50% 110%, oklch(0 0 0 / 4%), transparent);
+    background-attachment: fixed;
+  }
+  .dark body {
+    background-image:
+      radial-gradient(ellipse 60% 50% at 15% -10%, oklch(1 0 0 / 8%), transparent),
+      radial-gradient(ellipse 50% 40% at 100% 0%, oklch(1 0 0 / 6%), transparent),
+      radial-gradient(ellipse 60% 50% at 50% 110%, oklch(1 0 0 / 5%), transparent);
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer components {
+  /* Frosted glass surface for the handful of non-shadcn panels (warning
+     banners, JSON preview, badge rows) — same recipe as the Card/Sheet
+     primitives below, exposed here so those spots don't hand-roll it. */
+  .glass-panel {
+    @apply rounded-xl border border-border bg-card backdrop-blur-xl;
   }
 }

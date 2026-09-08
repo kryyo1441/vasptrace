@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import type { Chain } from "@/lib/generated/prisma/client";
+import { AlertTriangle, ShieldCheck } from "lucide-react";
 
 // react-force-graph-2d touches window/canvas at import time — must load client-only.
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
@@ -105,7 +106,7 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
   }, [graph]);
 
   return (
-    <div className="relative h-[500px] w-full overflow-hidden rounded-md border bg-card">
+    <div className="relative h-[500px] w-full overflow-hidden rounded-xl border border-border bg-card backdrop-blur-xl">
       <ForceGraph2D
         ref={fgRef}
         graphData={graphData}
@@ -156,7 +157,10 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
             {selected?.confidence && (
               <div>
                 <div className="text-xs text-muted-foreground">Confidence</div>
-                <div className="text-sm capitalize">{selected.confidence}</div>
+                <div className="flex items-center gap-1.5 text-sm capitalize">
+                  <ShieldCheck className="size-3.5 text-muted-foreground" />
+                  {selected.confidence}
+                </div>
                 <div className="text-xs text-muted-foreground">
                   {selected.confidenceReason ?? "Exact address match against the labeled-address DB"}
                 </div>
@@ -176,7 +180,10 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
             )}
             {selected && selected.typologyFlags.length > 0 && (
               <div>
-                <div className="text-xs text-muted-foreground">Typology flags (heuristic)</div>
+                <div className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <AlertTriangle className="size-3.5" />
+                  Typology flags (heuristic)
+                </div>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {selected.typologyFlags.map((f) => (
                     <Badge key={f} style={{ backgroundColor: FLAG_COLOR[f] }}>

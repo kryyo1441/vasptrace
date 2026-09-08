@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { FolderOpen, Plus } from "lucide-react";
 
 const RISK_COLOR: Record<string, string> = {
   LOW: "#16a34a",
@@ -16,13 +17,22 @@ export default async function CasesPage() {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-8">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Case dashboard</h1>
-          <p className="text-sm text-muted-foreground">
-            {cases.length} case{cases.length === 1 ? "" : "s"} traced so far.
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <FolderOpen className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Case dashboard</h1>
+            <p className="text-sm text-muted-foreground">
+              {cases.length} case{cases.length === 1 ? "" : "s"} traced so far.
+            </p>
+          </div>
         </div>
-        <Link href="/" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground underline-offset-4 hover:underline"
+        >
+          <Plus className="size-4" />
           New trace
         </Link>
       </div>
@@ -38,7 +48,7 @@ export default async function CasesPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b text-xs text-muted-foreground">
+                  <tr className="border-b border-border text-xs text-muted-foreground">
                     <th className="py-2 pr-4 font-medium">Address</th>
                     <th className="py-2 pr-4 font-medium">Chain</th>
                     <th className="py-2 pr-4 font-medium">Status</th>
@@ -49,7 +59,7 @@ export default async function CasesPage() {
                 </thead>
                 <tbody>
                   {cases.map((c) => (
-                    <tr key={c.id} className="border-b last:border-0 hover:bg-accent/50">
+                    <tr key={c.id} className="border-b border-border last:border-0 hover:bg-accent/50">
                       <td className="py-2 pr-4 font-mono">
                         <Link href={`/cases/${c.id}`} className="hover:underline">
                           {c.address}

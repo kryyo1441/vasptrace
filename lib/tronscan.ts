@@ -1,6 +1,9 @@
 // LIVE: hits Tronscan's public API for Tron. Works keyless at demo volume;
 // set TRONSCAN_API_KEY (sent as TRON-PRO-API-KEY) if rate limits bite.
+import { withPacing } from "@/lib/rateLimit";
+
 const TRONSCAN_BASE = "https://apilist.tronscanapi.com/api/transaction";
+const API_PACING_MS = 250;
 
 // contractType 1 = native TRX TransferContract. Traced the same way the
 // Ethereum tracer traces native ETH (not ERC20) — TRC20/USDT transfers are
@@ -40,25 +43,27 @@ export async function getOutgoingTransfers(address: string): Promise<TronOutgoin
   const apiKey = process.env.TRONSCAN_API_KEY;
   if (apiKey) headers["TRON-PRO-API-KEY"] = apiKey;
 
-  const res = await fetch(url.toString(), { headers });
-  if (!res.ok) {
-    throw new Error(`Tronscan API request failed: ${res.status}`);
-  }
-  const data = await res.json();
+  return withPacing("tronscan", API_PACING_MS, async () => {
+    const res = await fetch(url.toString(), { headers });
+    if (!res.ok) {
+      throw new Error(`Tronscan API request failed: ${res.status}`);
+    }
+    const data = await res.json();
 
-  return (data.data as TronscanTx[])
-    .filter(
-      (tx) =>
-        tx.contractType === NATIVE_TRANSFER_CONTRACT_TYPE &&
-        tx.contractRet === "SUCCESS" &&
-        tx.ownerAddress === address &&
-        tx.toAddress &&
-        tx.toAddress !== address
-    )
-    .map((tx) => ({
-      to: tx.toAddress!,
-      valueSun: String(tx.amount ?? "0"),
-      txHash: tx.hash,
-      timestamp: Math.floor(tx.timestamp / 1000), // ms -> unix seconds
-    }));
+    return (data.data as TronscanTx[])
+      .filter(
+        (tx) =>
+          tx.contractType === NATIVE_TRANSFER_CONTRACT_TYPE &&
+          tx.contractRet === "SUCCESS" &&
+          tx.ownerAddress === address &&
+          tx.toAddress &&
+          tx.toAddress !== address
+      )
+      .map((tx) => ({
+        to: tx.toAddress!,
+        valueSun: String(tx.amount ?? "0"),
+        txHash: tx.hash,
+        timestamp: Math.floor(tx.timestamp / 1000), // ms -> unix seconds
+      }));
+  });
 }

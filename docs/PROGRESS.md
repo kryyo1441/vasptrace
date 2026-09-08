@@ -119,6 +119,72 @@ All ten `PLAN.md` items now have a status other than "not started."
   self-checks). Added `.env.example` (`.env*` was blanket-gitignored, added
   a `!.env.example` exception).
 
+### 2026-09-08 — Day 2: hardening & demo-safety
+
+- **Live-demo risk (pre-verified demo addresses)**: wrote
+  `docs/DEMO_ADDRESSES.md` — 3 addresses per chain (9 total), each one hop
+  from a labeled exchange, all confirmed live via `POST /api/trace`. Picked
+  so the qualifying transfer sits at the front of that address's own
+  recent-tx window (Etherscan/Blockstream/Tronscan only return the most
+  recent N), so they stay stable even if the address transacts more before
+  judging day — verified this explicitly (checked each candidate's own
+  outgoing history, not just the exchange's incoming side, before picking
+  it). The WazirX ETH pick doubles as the best headline demo: highest
+  recommendation score (8) of any seed VASP, and dormant since 2024 so it
+  won't drift. Also documents which address *not* to use (an extremely
+  high-frequency BTC sweeper whose exchange payment is already outside its
+  own 25-tx Blockstream window).
+- **Seed data breadth**: `prisma/seed.ts` — added 9 more labeled addresses.
+  3 VASPs already in `vaspRegistry` (Kraken, KuCoin, OKX) had zero labeled
+  addresses on any chain, meaning a live trace could never actually
+  recommend them; same gap for Bitbns and MEXC. Sourced from Etherscan's
+  server-rendered "Public Name Tag" (same provenance as the original
+  entries — scraped and read directly, not from memory) and from
+  Tronscan's public hot-wallet directory (`api/hot/exchanges`, cross-checked
+  against each address's own `api/account` `addressTag` field). Verified
+  live end-to-end for 3 of the 9 (Kraken/ETH, WazirX/TRON, Bitbns/TRON) —
+  found real senders, confirmed the trace reaches the new label at high
+  confidence and `recommendVasp` returns the matching VASP. Re-ran
+  `npx tsx prisma/seed.ts`: 18 labeled addresses total (was 9).
+- **Confidence-clustering validation** (`lib/clustering.ts`): ran several
+  more real traces (beyond the original small sample) at depth 3-4 on busy
+  addresses. Medium tier (80% forward ratio) fired correctly on every
+  sender→exchange case tested. Low tier (≥3 fan-in senders) fired
+  selectively (3 of 50 nodes in one busy trace) rather than over-triggering
+  — and on inspection, two of those three turned out to be a real Etherscan-
+  tagged "Coinrail Hacker" address and a real tagged "Fake_Phishing1431"
+  address, neither in our seed data. That's the heuristic correctly
+  surfacing a genuine consolidation/laundering shape from behavior alone,
+  with no label to go on — good validation, no threshold change made.
+  Separately noted for a future pass: `lib/typology.ts`'s `FAN_OUT` flag
+  (≥3 destinations) fired on nearly every node in the same busy trace —
+  real wallets routinely have 3+ historical counterparties, so as currently
+  tuned it reads as "this address exists" more than "this address is
+  smurfing." Not touched today since it wasn't in today's scope
+  (`lib/clustering.ts` specifically was), but worth a threshold look on a
+  future pass.
+- **API pacing under concurrent traces** (Priority 4) — found and fixed a
+  real bug, not just confirmed a non-issue. `lib/tracers/bfs.ts`'s fixed
+  delay only paced hops *within one trace*; two concurrent traces each
+  started immediately with no shared pacing. Reproduced live: 6 concurrent
+  Ethereum traces produced real Etherscan `NOTOK` errors, and — importantly
+  — so did 6 truly simultaneous raw `curl` calls with the same API key and
+  no app involved at all, which showed the real constraint is concurrent
+  in-flight requests, not requests/sec. A first fix (stagger request *start*
+  times by 250ms) still failed live for the same reason — a single
+  request's round trip can exceed 250ms, so several were still in flight at
+  once. Replaced it with `lib/rateLimit.ts`'s `withPacing`, which queues the
+  *entire* call (start to response) per API so at most one request per
+  chain's API is ever in flight, process-wide, regardless of how many
+  traces are running. Moved the call site from the BFS loop into each API
+  client (`lib/etherscan.ts`, `lib/blockstream.ts`, `lib/tronscan.ts` — the
+  actual shared resource), which let the per-trace-only sleep and the
+  `pacingMs`/`API_PACING_MS` plumbing in `bfs.ts` and all three
+  `lib/tracers/*.ts` adapters come out entirely. Re-ran the same 6-concurrent
+  test after the fix: 0 API errors (was 6 of 6 failing at least one node).
+  All three existing self-checks (`clustering`, `typology`, `scoring.test.ts`)
+  still pass.
+
 ## Next up
 
 All ten plan items have a first pass — nothing blocks an end-to-end demo
@@ -127,11 +193,17 @@ PDF report → mock-route to VASP), which was the plan's stated definition of
 done for the week. Day 1 finished all of it; days 2-5 are hardening and
 demo-rehearsal, not new scope. See PLAN.md's
 ["Day-by-day schedule"](./PLAN.md#day-by-day-schedule-added-end-of-day-1)
-section for the actual breakdown. Two items called out there worth
-repeating here since they're the biggest open risks:
+section for the actual breakdown. Items worth repeating here since they're
+open risks:
 - Item 1: no pagination on the Bitcoin/Tron fetchers (Blockstream caps at
   ~25 recent txs, Tronscan capped at 50) — fine for a demo trace, would
   matter for a real caseload.
 - Item 6: someone needs to actually `docker compose up`, import both
   workflows, and confirm the canvas executes live during a real demo run —
   the code path is verified, the n8n side isn't.
+- Day 2's still-open item: the UI redesign (monochrome + glassmorphism,
+  described in `PLAN.md`'s Day 2 section) hasn't been built yet — today's
+  session covered the other four Day 2 items (demo addresses, seed
+  breadth, clustering validation, pacing fix) per explicit priority order.
+- `lib/typology.ts`'s `FAN_OUT` threshold (≥3 destinations) over-triggers
+  on real busy addresses — see the clustering-validation entry above.

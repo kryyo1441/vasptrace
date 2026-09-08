@@ -17,6 +17,7 @@ import { GraphView } from "@/components/graph-view";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
 import { vaspLine } from "@/lib/format";
 import type { TraceGraph, TypologyFlag } from "@/lib/tracers/types";
+import { AlertTriangle, ArrowRight, Network, Shield, Wallet } from "lucide-react";
 
 const ADDRESS_PLACEHOLDER: Record<string, string> = {
   ETHEREUM: "0x… wallet address",
@@ -61,29 +62,44 @@ export default function Home() {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-8">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">VASPtrace</h1>
-          <p className="text-sm text-muted-foreground">
-            Multi-chain wallet tracer — live on Ethereum, Bitcoin, and Tron.
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <Shield className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">VASPtrace</h1>
+            <p className="text-sm text-muted-foreground">
+              Multi-chain wallet tracer — live on Ethereum, Bitcoin, and Tron.
+            </p>
+          </div>
         </div>
-        <Link href="/cases" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+        <Link
+          href="/cases"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground underline-offset-4 hover:underline"
+        >
           Case dashboard
+          <ArrowRight className="size-4" />
         </Link>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">New trace</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Wallet className="size-4 text-muted-foreground" />
+            New trace
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-4 sm:flex-row">
-            <Input
-              placeholder={ADDRESS_PLACEHOLDER[chain]}
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              className="font-mono"
-            />
+            <div className="relative w-full">
+              <Wallet className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder={ADDRESS_PLACEHOLDER[chain]}
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="pl-8 font-mono"
+              />
+            </div>
             <Select value={chain} onValueChange={(v) => v && setChain(v)}>
               <SelectTrigger className="w-full sm:w-40">
                 <SelectValue />
@@ -114,16 +130,21 @@ export default function Home() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-base">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Network className="size-4 text-muted-foreground" />
                 Trace result — {graph.nodes.length} addresses, {graph.edges.length} transfers
               </CardTitle>
               {caseId && (
-                <Link href={`/cases/${caseId}`} className="text-xs text-primary underline-offset-4 hover:underline">
-                  Open case, generate report, route disclosure request →
+                <Link
+                  href={`/cases/${caseId}`}
+                  className="inline-flex items-center gap-1 text-xs text-foreground underline-offset-4 hover:underline"
+                >
+                  Open case, generate report, route disclosure request
+                  <ArrowRight className="size-3" />
                 </Link>
               )}
             </div>
-            <div className="flex gap-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
               <Badge variant="outline" style={{ borderColor: "#dc2626", color: "#dc2626" }}>Suspect</Badge>
               <Badge variant="outline" style={{ borderColor: "#6b7280", color: "#6b7280" }}>Intermediary</Badge>
               <Badge variant="outline" style={{ borderColor: "#16a34a", color: "#16a34a" }}>Exchange</Badge>
@@ -134,7 +155,10 @@ export default function Home() {
           <CardContent>
             {typologyFlags.length > 0 && (
               <div className="mb-3 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">Typology flags (rule-based heuristics):</span>
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <AlertTriangle className="size-3.5" />
+                  Typology flags (rule-based heuristics):
+                </span>
                 {typologyFlags.map((f) => (
                   <Badge key={f} variant="secondary">
                     {TYPOLOGY_LABEL[f]}
@@ -143,10 +167,13 @@ export default function Home() {
               </div>
             )}
             {graph.warnings.length > 0 && (
-              <div className="mb-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-xs text-yellow-700 dark:text-yellow-400">
-                {graph.warnings.map((w, i) => (
-                  <div key={i}>{w}</div>
-                ))}
+              <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 backdrop-blur-xl dark:text-amber-400">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                <div className="flex flex-col gap-0.5">
+                  {graph.warnings.map((w, i) => (
+                    <div key={i}>{w}</div>
+                  ))}
+                </div>
               </div>
             )}
             <GraphView graph={graph} />
@@ -157,7 +184,8 @@ export default function Home() {
       {graph?.recommendation && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Shield className="size-4 text-muted-foreground" />
               Recommended VASP for disclosure request
               {graph.recommendation.alternatives.length > 0 &&
                 ` — ${graph.recommendation.top.vaspName} over ${graph.recommendation.alternatives[0].vaspName}`}

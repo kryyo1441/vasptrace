@@ -58,6 +58,76 @@ const labeledAddresses: {
     entityName: "Bitfinex",
     source: "Tronscan public address tag (addressTag: Bitfinex)",
   },
+  // --- Day 2 breadth expansion: VASPs already in vaspRegistry (Kraken,
+  // KuCoin, OKX, MEXC, Bitbns) had no labeled address on any chain, so a
+  // live trace could never actually recommend them. Sourced from
+  // Etherscan's server-rendered "Public Name Tag" (scraped 2026-09-08,
+  // same provenance as the original Etherscan entries above) and
+  // Tronscan's public hot-wallet directory (api/hot/exchanges, cross-
+  // checked against api/account's addressTag field for each address). ---
+  {
+    address: "0x2910543af39aba0cd09dbb2d50200b3e800a63d2",
+    chain: Chain.ETHEREUM,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Kraken 1",
+    source: "Etherscan public name tag",
+  },
+  {
+    address: "0x236f9f97e0e62388479bf9e5ba4889e46b0273c3",
+    chain: Chain.ETHEREUM,
+    labelType: LabelType.EXCHANGE,
+    entityName: "OKX 2",
+    source: "Etherscan public name tag",
+  },
+  {
+    address: "0x2b5634c42055806a59e9107ed44d43c426e58258",
+    chain: Chain.ETHEREUM,
+    labelType: LabelType.EXCHANGE,
+    entityName: "KuCoin 1",
+    source: "Etherscan public name tag",
+  },
+  {
+    address: "TByxhqkBrdKuW984Yt9wJP3Kmsy57dnirw",
+    chain: Chain.TRON,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Bitbns",
+    source: "Tronscan public hot-wallet directory (addressTag: Bitbns)",
+  },
+  {
+    address: "TXe3EibZP9jFogwyqLPd3APdwxZbiQBUqi",
+    chain: Chain.TRON,
+    labelType: LabelType.EXCHANGE,
+    entityName: "WazirX Exchange Hot Wallet",
+    source: "Tronscan public hot-wallet directory (addressTag: WazirX Exchange Hot Wallet)",
+  },
+  {
+    address: "TTd9qHyjqiUkfTxe3gotbuTMpjU8LEbpkN",
+    chain: Chain.TRON,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Kraken (Tron hot wallet)",
+    source: "Tronscan public hot-wallet directory (addressTag: Kraken)",
+  },
+  {
+    address: "TLWE45u7eusdewSDCjZqUNmyhTUL1NBMzo",
+    chain: Chain.TRON,
+    labelType: LabelType.EXCHANGE,
+    entityName: "KuCoin (Tron hot wallet, tagged Kucoin 1)",
+    source: "Tronscan public hot-wallet directory (addressTag: Kucoin 1)",
+  },
+  {
+    address: "TM1zzNDZD2DPASbKcgdVoTYhfmYgtfwx9R",
+    chain: Chain.TRON,
+    labelType: LabelType.EXCHANGE,
+    entityName: "OKX (Tron hot wallet, tagged Okex 1)",
+    source: "Tronscan public hot-wallet directory (addressTag: Okex 1)",
+  },
+  {
+    address: "TB37WWozkkenGVYWD7Do2N5WT2CedqDktJ",
+    chain: Chain.TRON,
+    labelType: LabelType.EXCHANGE,
+    entityName: "MEXC (Tron hot wallet, tagged MXC 2)",
+    source: "Tronscan public hot-wallet directory (addressTag: MXC 2)",
+  },
   // --- Tornado Cash mixer contracts. OFAC-sanctioned 2022, delisted by
   // Treasury March 2025 — still labeled MIXER here since the tracer's job
   // is AML pattern detection, not live sanctions-list matching. ---
