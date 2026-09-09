@@ -1,5 +1,12 @@
 import type { VaspRecommendation } from "@/lib/tracers/types";
-import type { RiskLevel } from "@/lib/generated/prisma/client";
+import type { Chain, RiskLevel } from "@/lib/generated/prisma/client";
+
+export const CHAIN_LABEL: Record<Chain, string> = { ETHEREUM: "Ethereum", BITCOIN: "Bitcoin", TRON: "Tron" };
+
+// Shared with app/api/cases/[id]/sahyog/route.ts's simulated payload — kept
+// in one place so the disclosure email draft (components/sahyog-button.tsx)
+// can't drift from what the "real" routed payload actually cites.
+export const LEGAL_BASIS = "Section 91, Code of Criminal Procedure (India)";
 
 // CSS custom properties (light/dark pair defined in app/globals.css) rather
 // than raw hex — the flat brand hues here failed WCAG AA text contrast

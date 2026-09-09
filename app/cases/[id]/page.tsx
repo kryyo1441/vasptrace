@@ -10,6 +10,7 @@ import { vaspLine, RISK_COLOR } from "@/lib/format";
 import type { TraceGraph } from "@/lib/tracers/types";
 import { AlertTriangle, ArrowLeft, FileText, Network, Shield, Wallet } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { VaspScoreGauge } from "@/components/vasp-score-gauge";
 
 export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -112,18 +113,27 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2 text-sm">
-              <p className="font-medium text-foreground">{vaspLine(graph.recommendation.top)}</p>
-              {graph.recommendation.alternatives.map((alt) => (
-                <p key={alt.address} className="text-muted-foreground">
-                  {vaspLine(alt)}
-                </p>
-              ))}
+            <div className="flex flex-col items-center gap-4 sm:flex-row">
+              <VaspScoreGauge rec={graph.recommendation.top} />
+              <div className="flex flex-1 flex-col gap-2 text-sm">
+                <p className="font-medium text-foreground">{vaspLine(graph.recommendation.top)}</p>
+                {graph.recommendation.alternatives.map((alt) => (
+                  <p key={alt.address} className="text-muted-foreground">
+                    {vaspLine(alt)}
+                  </p>
+                ))}
+              </div>
             </div>
             <SahyogButton
               caseId={kase.id}
               vaspName={graph.recommendation.top.vaspName}
               alreadyRouted={kase.status === "ROUTED"}
+              address={kase.address}
+              chain={kase.chain}
+              // Mirrors app/api/cases/[id]/sahyog/route.ts's evidenceTrail
+              // slice exactly, so the email draft cites the same evidence
+              // the actual (simulated) routed payload would.
+              evidenceTrail={graph.edges.slice(0, 10).map((e) => e.latestTxHash)}
             />
           </CardContent>
         </Card>

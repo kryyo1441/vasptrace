@@ -5,13 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { RankedBarChart, Sparkline } from "@/components/dashboard-charts";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FolderOpen, Plus, Layers, Send, ShieldAlert, TrendingUp, type LucideIcon } from "lucide-react";
-import { RISK_COLOR } from "@/lib/format";
+import { CHAIN_LABEL, RISK_COLOR } from "@/lib/format";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
 import type { RiskLevel, Chain } from "@/lib/generated/prisma/client";
 import type { TypologyFlag } from "@/lib/tracers/types";
 
 const RISK_ORDER: RiskLevel[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
-const CHAIN_LABEL: Record<Chain, string> = { ETHEREUM: "Ethereum", BITCOIN: "Bitcoin", TRON: "Tron" };
 // Non-functional chart colors (the CSS custom properties in globals.css) —
 // distinct from RISK_COLOR, which stays reserved for meaning.
 const CHAIN_COLOR: Record<Chain, string> = {

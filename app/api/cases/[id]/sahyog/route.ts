@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { notifyN8n } from "@/lib/n8n";
+import { LEGAL_BASIS } from "@/lib/format";
 import type { TraceGraph } from "@/lib/tracers/types";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -26,7 +27,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     chain: kase.chain,
     targetVasp: kase.recommendedVaspId,
     riskLevel: kase.riskLevel,
-    legalBasis: "Section 91, Code of Criminal Procedure (India)",
+    legalBasis: LEGAL_BASIS,
     evidenceTrail,
     submittedAt: new Date().toISOString(),
   };
