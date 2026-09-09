@@ -9,6 +9,7 @@ import { TYPOLOGY_LABEL } from "@/lib/typology";
 import { vaspLine, RISK_COLOR } from "@/lib/format";
 import type { TraceGraph } from "@/lib/tracers/types";
 import { AlertTriangle, ArrowLeft, FileText, Network, Shield, Wallet } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,7 +20,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   const typologyFlags: string[] = kase.typologyFlags ? JSON.parse(kase.typologyFlags) : [];
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6 p-8">
+    <div className="flex w-full flex-col gap-6 px-6 py-8 lg:px-10 xl:px-16">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <Link
@@ -53,6 +54,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
               Download PDF report
             </a>
           )}
+          <ThemeToggle />
         </div>
       </div>
 

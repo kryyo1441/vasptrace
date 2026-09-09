@@ -509,6 +509,77 @@ diff.
     a live rehearsal exercise, better run by a person than simulated here.
     The individual pieces it exercises were each verified above.
 
+### 2026-09-09 — Day 4 follow-up: full-width layout, shadcn charts, light/dark mode
+
+Requested after the blue repaint above shipped — not in PLAN.md, logged here
+since it changes shipped behavior. Also fixed, unrelated: the dev server had
+been stopped as end-of-session "cleanup" after the repaint work, which is
+what actually caused the "UI isn't reflecting on localhost" report — restarted
+it. Separately, the user's browser also had a stale service worker
+(`bookish-v1`, left behind by a different project dev-served on the same
+`localhost` origin — the exact gotcha PROGRESS.md's Day 3 entry already
+documents) serving a cached pre-repaint bundle; unregistered it and cleared
+the cache directly in the browser tab.
+
+- **Full-width layout.** All three pages (`/`, `/cases`, `/cases/[id]`)
+  dropped their `mx-auto max-w-5xl` wrapper for `w-full` with responsive
+  padding — content now uses the available viewport instead of a centered
+  narrow column. The dashboard's 4-chart grid gained an `xl:grid-cols-4`
+  breakpoint so it lays out as one row on wide screens instead of 2×2. The
+  home hero's search card widened from `max-w-2xl` to `max-w-4xl` — kept a
+  cap rather than going edge-to-edge, since a single text input spanning an
+  entire ultrawide monitor is a real usability regression (line length,
+  mouse travel), not just an aesthetic call.
+- **shadcn chart components** (`components/ui/chart.tsx`, fetched from
+  shadcn's `new-york-v4` registry to match this project's Tailwind v4 setup;
+  `recharts@3.10.1` added). Replaced every hand-rolled bar-row/inline-SVG
+  chart on `/cases` with real `BarChart`/`AreaChart` — risk distribution,
+  cases-per-chain, most-recommended VASPs, and most-common-typology-flags
+  are now horizontal `BarChart`s (functional risk colors still passed
+  through per-`Cell`, not absorbed into the chart's own palette), and the
+  14-day trend is a gradient-filled `AreaChart`. Real tooltips and axis
+  ticks came free.
+  - **Real bug caught before shipping, not just designed around:** recharts
+    touches React context at module scope, so importing it into
+    `app/cases/page.tsx` (an async Server Component doing the Prisma fetch)
+    broke the page outright — blank page, console showed `createContext
+    only works in Client Components`. Moved the actual chart JSX into a new
+    `components/dashboard-charts.tsx` (`"use client"`), which the server
+    page now calls with plain data props. `app/cases/page.tsx` itself
+    stayed a server component.
+  - **Verification quirk worth recording:** a 375px headless
+    `chromium --screenshot` capture showed the four chart cards fully
+    blank (no bars, no titles) below the risk-distribution panel. Chased it
+    with puppeteer instead of trusting the screenshot: `page.evaluate`
+    confirmed every card had its correct title text *and* the exact right
+    number of `.recharts-bar-rectangle` elements with real non-zero
+    geometry, `scrollWidth === clientWidth` (no overflow), and the same
+    page in the actual GPU-accelerated connected browser rendered all four
+    charts correctly with a working hover tooltip. Same class of false
+    positive as Day 3's force-graph-canvas screenshot timing issue — logged
+    so a future session doesn't re-chase it as a real bug.
+- **Light/dark mode** (`next-themes@0.4.6`, `attribute="class"`,
+  `defaultTheme="system"`). `app/layout.tsx` wraps `children` in a
+  `ThemeProvider`, `components/theme-toggle.tsx` adds a sun/moon button to
+  all three page headers. The `.dark` token block in `globals.css` already
+  existed (Day 3 built it defensively even though nothing could reach it
+  then) — this is what finally makes it reachable. First real check of it:
+  pixel-sampled the actual dark-mode composited surfaces the same way Day
+  4's light-mode contrast fix did (canvas-based RGB extraction, not
+  inference) — all four `--risk-*` dark values clear AA with real margin
+  (6.4:1–11.7:1 across both the card and page-direct surfaces). The graph
+  canvas's on-node labels (`components/graph-view.tsx`) use a hardcoded
+  `#1e293b` fill regardless of theme — works in dark mode too because the
+  white stroke-halo behind the text (added for the light-mode legibility
+  pass) provides its own contrast independent of the canvas background;
+  confirmed visually rather than assumed.
+  - The toggle's first implementation used a `mounted` state + `useEffect`
+    to dodge next-themes' hydration mismatch — `eslint`'s
+    `react-hooks/set-state-in-effect` rule caught it. Rewrote to render both
+    icons unconditionally and let the `.dark` class pick which one shows via
+    `dark:scale-0`/`dark:scale-100` — sidesteps the client-only state
+    entirely rather than suppressing the lint rule.
+
 ## Next up
 
 All ten plan items have a first pass — nothing blocks an end-to-end demo

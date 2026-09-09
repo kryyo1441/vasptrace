@@ -2,6 +2,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { RankedBarChart, Sparkline } from "@/components/dashboard-charts";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { FolderOpen, Plus, Layers, Send, ShieldAlert, TrendingUp, type LucideIcon } from "lucide-react";
 import { RISK_COLOR } from "@/lib/format";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
@@ -10,6 +12,13 @@ import type { TypologyFlag } from "@/lib/tracers/types";
 
 const RISK_ORDER: RiskLevel[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
 const CHAIN_LABEL: Record<Chain, string> = { ETHEREUM: "Ethereum", BITCOIN: "Bitcoin", TRON: "Tron" };
+// Non-functional chart colors (the CSS custom properties in globals.css) —
+// distinct from RISK_COLOR, which stays reserved for meaning.
+const CHAIN_COLOR: Record<Chain, string> = {
+  ETHEREUM: "var(--chart-2)",
+  BITCOIN: "var(--chart-3)",
+  TRON: "var(--chart-4)",
+};
 
 function StatTile({
   icon: Icon,
@@ -35,38 +44,6 @@ function StatTile({
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-// Horizontal bar list — no charting dependency needed for a handful of rows.
-function BarRow({ label, count, max, color }: { label: string; count: number; max: number; color?: string }) {
-  const pct = max > 0 ? Math.max((count / max) * 100, count > 0 ? 4 : 0) : 0;
-  return (
-    <div className="flex items-center gap-3 text-sm">
-      <span className="w-28 shrink-0 truncate text-muted-foreground">{label}</span>
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${pct}%`, backgroundColor: color ?? "var(--primary)" }}
-        />
-      </div>
-      <span className="w-6 shrink-0 text-right font-medium tabular-nums">{count}</span>
-    </div>
-  );
-}
-
-// Cheap inline SVG sparkline of cases/day — no charting dependency, and it
-// makes an otherwise static dashboard look alive during a demo.
-function Sparkline({ counts }: { counts: number[] }) {
-  const max = Math.max(...counts, 1);
-  const w = 240;
-  const h = 40;
-  const step = counts.length > 1 ? w / (counts.length - 1) : 0;
-  const points = counts.map((c, i) => `${i * step},${h - (c / max) * (h - 4) - 2}`).join(" ");
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-10 w-full text-primary" preserveAspectRatio="none">
-      <polyline points={points} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
   );
 }
 
@@ -100,24 +77,34 @@ export default async function CasesPage() {
     }
   }
 
-  const topVasps = [...vaspCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const topFlags = [...flagCounts.entries()].sort((a, b) => b[1] - a[1]);
-  const maxVaspCount = Math.max(...topVasps.map(([, n]) => n), 1);
-  const maxFlagCount = Math.max(...topFlags.map(([, n]) => n), 1);
+  const riskChartData = RISK_ORDER.map((r) => ({ label: r, count: riskCounts.get(r) ?? 0, fill: RISK_COLOR[r] }));
+  const chainChartData = (Object.keys(CHAIN_LABEL) as Chain[]).map((c) => ({
+    label: CHAIN_LABEL[c],
+    count: chainCounts.get(c) ?? 0,
+    fill: CHAIN_COLOR[c],
+  }));
+  const vaspChartData = [...vaspCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([id, n]) => ({ label: vaspName.get(id) ?? id, count: n, fill: "var(--chart-1)" }));
+  const flagChartData = [...flagCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([f, n]) => ({ label: TYPOLOGY_LABEL[f], count: n, fill: "var(--chart-5)" }));
 
   // Last 14 days of trace volume, oldest first.
   const DAYS = 14;
-  const dayCounts = Array.from({ length: DAYS }, (_, i) => {
+  const dayData = Array.from({ length: DAYS }, (_, i) => {
     const day = new Date();
     day.setUTCHours(0, 0, 0, 0);
     day.setUTCDate(day.getUTCDate() - (DAYS - 1 - i));
     const next = new Date(day);
     next.setUTCDate(next.getUTCDate() + 1);
-    return cases.filter((c) => c.createdAt >= day && c.createdAt < next).length;
+    const count = cases.filter((c) => c.createdAt >= day && c.createdAt < next).length;
+    return { day: day.toLocaleDateString(undefined, { month: "short", day: "numeric" }), count };
   });
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6 p-8">
+    <div className="flex w-full flex-col gap-6 px-6 py-8 lg:px-10 xl:px-16">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/25">
@@ -130,13 +117,16 @@ export default async function CasesPage() {
             </p>
           </div>
         </div>
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground underline-offset-4 hover:underline"
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          New trace
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground underline-offset-4 hover:underline"
+          >
+            <Plus className="size-4" aria-hidden="true" />
+            New trace
+          </Link>
+          <ThemeToggle />
+        </div>
       </div>
 
       {total === 0 ? (
@@ -159,15 +149,13 @@ export default async function CasesPage() {
             <StatTile icon={Layers} label="Chains covered" value={chainCounts.size} />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Risk-level distribution</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col gap-2.5">
-                {RISK_ORDER.map((r) => (
-                  <BarRow key={r} label={r} count={riskCounts.get(r) ?? 0} max={total} color={RISK_COLOR[r]} />
-                ))}
+              <CardContent>
+                <RankedBarChart data={riskChartData} emptyMessage="No risk-scored cases yet." />
               </CardContent>
             </Card>
 
@@ -175,10 +163,8 @@ export default async function CasesPage() {
               <CardHeader>
                 <CardTitle className="text-base">Cases per chain</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col gap-2.5">
-                {(Object.keys(CHAIN_LABEL) as Chain[]).map((c) => (
-                  <BarRow key={c} label={CHAIN_LABEL[c]} count={chainCounts.get(c) ?? 0} max={total} />
-                ))}
+              <CardContent>
+                <RankedBarChart data={chainChartData} emptyMessage="No cases yet." />
               </CardContent>
             </Card>
 
@@ -186,14 +172,8 @@ export default async function CasesPage() {
               <CardHeader>
                 <CardTitle className="text-base">Most-recommended VASPs</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col gap-2.5">
-                {topVasps.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No recommendations yet.</p>
-                ) : (
-                  topVasps.map(([id, n]) => (
-                    <BarRow key={id} label={vaspName.get(id) ?? id} count={n} max={maxVaspCount} />
-                  ))
-                )}
+              <CardContent>
+                <RankedBarChart data={vaspChartData} emptyMessage="No recommendations yet." />
               </CardContent>
             </Card>
 
@@ -201,14 +181,8 @@ export default async function CasesPage() {
               <CardHeader>
                 <CardTitle className="text-base">Most-common typology flags</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col gap-2.5">
-                {topFlags.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No flags raised yet.</p>
-                ) : (
-                  topFlags.map(([f, n]) => (
-                    <BarRow key={f} label={TYPOLOGY_LABEL[f]} count={n} max={maxFlagCount} />
-                  ))
-                )}
+              <CardContent>
+                <RankedBarChart data={flagChartData} emptyMessage="No flags raised yet." />
               </CardContent>
             </Card>
           </div>
@@ -221,7 +195,7 @@ export default async function CasesPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Sparkline counts={dayCounts} />
+              <Sparkline data={dayData} />
             </CardContent>
           </Card>
         </>

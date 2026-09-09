@@ -18,6 +18,7 @@ import { TYPOLOGY_LABEL } from "@/lib/typology";
 import { vaspLine } from "@/lib/format";
 import type { TraceGraph, TypologyFlag } from "@/lib/tracers/types";
 import { AlertTriangle, ArrowRight, Loader2, Network, Search, Shield, Wallet } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const ADDRESS_PLACEHOLDER: Record<string, string> = {
   ETHEREUM: "0x… wallet address",
@@ -61,8 +62,8 @@ export default function Home() {
   }
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6 p-8">
-      <div className="flex flex-wrap items-center justify-end gap-4">
+    <div className="flex w-full flex-col gap-6 px-6 py-8 lg:px-10 xl:px-16">
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <Link
           href="/cases"
           className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground underline-offset-4 hover:underline"
@@ -70,6 +71,7 @@ export default function Home() {
           Case dashboard
           <ArrowRight className="size-4" aria-hidden="true" />
         </Link>
+        <ThemeToggle />
       </div>
 
       {/* Search-engine landing hero: centered mark, one dominant input, the
@@ -94,7 +96,7 @@ export default function Home() {
           </p>
         </div>
 
-        <Card className="w-full max-w-2xl">
+        <Card className="w-full max-w-4xl">
           <CardContent className="flex flex-col gap-3 pt-1">
             <div className="relative w-full">
               <Search className="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
