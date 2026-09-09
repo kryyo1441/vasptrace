@@ -13,7 +13,7 @@ history.
 | 3 | Legal-actionability scoring | **Done** — `lib/scoring.ts`, wired into the trace response, rendered on `/` and the case detail page. |
 | 4 | Confidence scoring (high/medium/low) | **Done** — `lib/clustering.ts`: medium = forwards ≥80% of value to a known exchange, low = fan-in from ≥3 senders that forwards onward. Excluded from VASP recommendation (only exact-match routes a disclosure request). |
 | 5 | Graph visualization | **Done** — force-directed graph, color coding, click → detail sheet, edge tooltips, per-chain unit formatting (ETH/BTC/TRX). |
-| 6 | n8n workflow visualization | **Done** — `docker-compose.yml` + two workflows in `n8n/workflows/`, fire-and-forget notify (`lib/n8n.ts`) from the trace and Sahyog routes. n8n is optional and never blocks/fails either flow — verified live with an unreachable webhook URL. |
+| 6 | n8n workflow visualization | **Done, rehearsed live** — `docker-compose.yml` + two workflows in `n8n/workflows/`, fire-and-forget notify (`lib/n8n.ts`) from the trace and Sahyog routes. n8n is optional and never blocks/fails either flow — verified live with an unreachable webhook URL. Both workflows also run for real against `n8nio/n8n:latest`: imported, activated, and confirmed on the canvas from a real trace and a real Sahyog click (Day 3 — fixed a dead `typeVersion: 1` IF node and a webhook `body`-unwrap bug found only by running it). |
 | 7 | Case dashboard | **Done** — every trace persists as a `Case` (`/api/trace`), listed at `/cases`, each row links to a detail page at `/cases/[id]`. |
 | 8 | PDF report | **Done** — `@react-pdf/renderer`, `app/api/cases/[id]/report/route.ts`, renders entirely from the persisted `Case.traceResult` (no re-trace). |
 | 9 | Mocked Sahyog routing | **Done** — `app/api/cases/[id]/sahyog/route.ts` + `SahyogButton`, flips `Case.status` to `ROUTED`, shows the simulated payload inline with a "Simulated integration" badge. |
@@ -185,6 +185,223 @@ All ten `PLAN.md` items now have a status other than "not started."
   All three existing self-checks (`clustering`, `typology`, `scoring.test.ts`)
   still pass.
 
+### 2026-09-09 — Day 3: UI/UX polish + PDF letterhead
+
+- **Mobile overflow bug (real bug, not just untested)**: `/cases` and
+  `/cases/[id]` had page-level horizontal scroll at mobile widths — traced it
+  with a headless-Chromium `scrollWidth` probe (`puppeteer-core` driving the
+  system `chromium` binary, no new project dependency) rather than eyeballing
+  screenshots. Root cause: `app/layout.tsx`'s `<body>` was `flex flex-col`
+  with no sibling relying on it (no footer, no `flex-1` child anywhere) —
+  every page's root wrapper div was therefore a flex item of `<body>` and
+  defaulted to `min-width: auto`, letting wide content (the 6-column cases
+  table, the force-graph canvas) grow the whole page past the viewport
+  instead of scrolling internally inside their own `overflow-x-auto`/canvas
+  containers. Deleted the unused `flex flex-col` from `<body>` — single-point
+  fix, no per-page patching needed. Two smaller, separate wrapping bugs
+  fixed alongside it: the case-detail address heading (`break-all` flex
+  container) needed `min-w-0` to actually let the unbroken 42-char address
+  shrink instead of just failing to wrap; the Sahyog "Simulated integration"
+  badge had `whitespace-nowrap` baked into the shared `Badge` component,
+  which is correct for every other (short) badge in the app but overflowed
+  for this one's long copy — overridden with `whitespace-normal` on that one
+  instance rather than changing the shared component. Verified live: probed
+  `/`, `/cases`, `/cases/[id]` at a 375px viewport before and after —
+  `scrollWidth` now equals `375` (viewport) on all three, zero offending
+  elements, confirmed visually via headless screenshots too.
+- **Loading state**: the trace form previously gave no feedback beyond the
+  button label ("Tracing…") while a trace ran — worth fixing now that
+  today's `withPacing` change (see the pacing-fix entry above) can make a
+  multi-hop trace take noticeably longer than before. Added a simple
+  spinner card (`lucide-react`'s `Loader2` + `animate-spin`, both already
+  available — no new dependency) between the form and the results area.
+  Verified live by driving a real form submission with `puppeteer-core`
+  (typed an address, clicked Run trace, screenshotted mid-request) —
+  spinner renders correctly, then the real result replaces it.
+- **Accessibility basics**: the address/chain/depth inputs on the home page
+  had no accessible name (placeholder-only) — added `aria-label` to all
+  three. Added `aria-hidden="true"` to the decorative header icons touched
+  in this pass. Didn't do a full icon sweep across the codebase (diminishing
+  returns for a hackathon demo); the form controls were the actual gap since
+  they're the only interactive, unlabeled elements.
+- **Reuse fix while in the area**: `RISK_COLOR` was hand-duplicated in both
+  `app/cases/page.tsx` and `app/cases/[id]/page.tsx`; needed a third copy
+  for the PDF letterhead work below, which is the "rule of three" signal to
+  stop duplicating — moved it to `lib/format.ts` (already home to
+  `vaspLine`, the other cross-page VASP-recommendation formatter) and
+  imported it in all three places instead of writing a third inline copy.
+- **PDF report letterhead** (`lib/pdf/report.tsx`): added a small black
+  square mark ("V") next to the report title, mirroring the app's own
+  `bg-primary` icon badge; the risk level is now a colored bordered badge
+  using the same `RISK_COLOR` values as the on-screen risk badges instead of
+  plain text; section titles got a thin hairline bottom border, echoing the
+  UI's "thin hairline borders" glassmorphism direction from `PLAN.md`'s Day
+  2 note. Kept it to a letterhead/accent treatment, not a redesign — the
+  report was already functionally correct and legible. Verified live:
+  downloaded and rendered the actual PDF (`pdftoppm`) for a real traced
+  case, confirmed the mark, hairlines, and green LOW-risk badge all render
+  correctly.
+- **n8n live rehearsal (Priority 1, blocked)**: the actual `docker compose
+  up` / workflow import / live-canvas verification — the one Day 2 item that
+  shipped without live verification — is blocked in this session because
+  the Docker daemon isn't running and starting it needs `sudo`, which
+  requires a password this session doesn't have. Asked the user to start it
+  (`sudo systemctl start docker`) and worked ahead on UI/PDF polish in the
+  meantime; n8n rehearsal is still open as of this entry. Update: the user
+  is on remote control and `sudo` needs an interactive password that channel
+  can't supply — deferred until they're back at the physical machine.
+  Update 2: back at the machine, `sudo systemctl start docker` still failed.
+  Root-caused via `journalctl -u docker.service`: dockerd fails with
+  `iptables: Failed to initialize nft: Protocol not supported` — the
+  `nf_tables` kernel module can't load. `ls /lib/modules/` shows only
+  `6.18.50-1-lts` and `7.2.3-arch1-3` on disk, but `uname -r` reports the
+  *running* kernel as `6.18.49-3-lts` — a kernel upgrade removed that
+  version's module tree without a reboot yet, so no kernel module can load
+  for the currently-running kernel, Docker included. **Fix is a reboot**
+  (boots into a kernel whose modules actually exist on disk); not something
+  to trigger without the user's explicit go-ahead mid-session. n8n
+  rehearsal remains the one open Day 3 item, blocked purely on that reboot
+  — once it's done, Docker should start cleanly and the rehearsal
+  (`docker compose up -d`, import both `n8n/workflows/*.json`, activate,
+  wire `.env`'s `N8N_TRACE_WEBHOOK_URL`/`N8N_SAHYOG_WEBHOOK_URL` to the
+  *activated* webhook URLs — `http://localhost:5678/webhook/vasptrace-trace`
+  and `/vasptrace-sahyog`, not `/webhook-test/...` which only listens while
+  the n8n editor is open — then restart `next dev` since `.env` is read at
+  boot, then run a real trace and a real Sahyog-routing click and confirm
+  both fire in n8n's execution list) is otherwise unblocked and everything
+  else needed for it (`docker-compose.yml`, both workflow JSON files,
+  `.env.example`) is already in place and unchanged.
+- **`lib/typology.ts`'s `FAN_OUT` over-triggering (flagged in Day 2, fixed
+  today)**: root-caused it rather than just retuning the number. `bfs.ts`
+  caps stored outgoing edges per node at `FANOUT_CAP = 5` (a fixed perf/API-
+  budget cap — see the `ponytail:` note there), but `FAN_OUT_MIN_DESTINATIONS`
+  was `3` — so the flag was mostly detecting "this node hit the tracer's own
+  truncation ceiling," which any moderately active real wallet does, not a
+  real fan-out/smurfing signal. Confirmed live with a depth-3 trace off a
+  busy real EOA (`0xd8dA6BF...`, 16 nodes): 5 of 16 flagged, and two of those
+  five had wildly mismatched destination values (near-zero-value contract
+  calls sitting next to a real transfer) — not remotely smurfing-shaped,
+  just noise that happened to reach 3 destinations. Fixed by raising
+  `FAN_OUT_MIN_DESTINATIONS` to `5` — the flag now only fires when a node
+  sits at the tracer's own observable ceiling, the one case where "at least
+  this many destinations, possibly more" is a claim the data actually
+  supports. Same live trace after the fix: 3 of 16 flagged (down from 5),
+  and both noise nodes correctly excluded. Kept it a separate constant
+  rather than importing `bfs.ts`'s `FANOUT_CAP` directly (an internal review
+  pass caught this: the two constants answer different questions — "how
+  much fan-out is suspicious" vs. "how much can the tracer afford to
+  fetch" — and coupling them would silently break if `FANOUT_CAP` is ever
+  tuned down past 3, making the `PEEL_CHAIN` branch unreachable). Updated
+  `lib/typology.test.ts` accordingly. All three self-checks (`typology`,
+  `clustering`, `scoring`) and `tsc --noEmit` still pass.
+- **Post-hoc review pass** (asked for a second opinion after the above):
+  caught three more real gaps before calling Day 3 done.
+  - **Empty state for "no VASP recommendation"** — `app/page.tsx` and
+    `app/cases/[id]/page.tsx` rendered nothing at all when a trace reached
+    no labeled exchange (`graph.recommendation === null`), which is exactly
+    the Day-4-flagged adversarial scenario ("a trace that never reaches any
+    exchange") and reads as a broken page, not a handled case. Added a
+    plain-text card on both pages. Verified live on both: a random
+    never-used address traces to a single SUSPECT node with no recommendation
+    and now shows "No labeled VASP reached within N hops — no disclosure
+    request can be recommended for this trace."
+  - **Risk-badge/Sahyog-badge text contrast** — measured the actual
+    `RISK_COLOR` hex values (now centralized in `lib/format.ts`) and the
+    Sahyog badge's `amber-600` against WCAG AA (4.5:1 for this size text):
+    all four risk colors and the amber badge failed in at least one theme
+    (e.g. `MEDIUM #ca8a04` was 2.94:1 on white). `PLAN.md` says keep the
+    functional *meaning* of these colors, not the literal shade, so fixed by
+    darkening (light mode) / lightening (dark mode) within the same hue,
+    confirmed all pass 4.5:1+ both ways. Implemented as CSS custom
+    properties (`--risk-low` etc. in `app/globals.css`, light/dark pair —
+    matches the app's existing token pattern) rather than a single hex, since
+    the old single value couldn't pass 4.5:1 against both a white and a
+    near-black background at once (the math doesn't allow it for a saturated
+    color). `lib/pdf/report.tsx` can't consume CSS vars (static white-page
+    rendering, no theme) so it keeps its own literal light-mode hex map,
+    commented to stay in sync with `globals.css`. Note: found that no
+    `.dark` class is ever applied anywhere in the app (no `next-themes` or
+    equivalent) — dark mode is currently unreachable, so only the light-mode
+    values are live today; the dark pair is there for whenever a toggle gets
+    wired up, matching the pre-existing (already-dead) `.dark {}` block in
+    `globals.css`. Didn't add a theme toggle — out of scope for today.
+  - Confirmed two suspected issues were **not** real: the graph canvas
+    appearing blank in an earlier screenshot was a screenshot-tool timing
+    artifact (the CLI `chromium --headless --screenshot` captures before the
+    force-graph physics settle) — re-checked with an explicit wait via
+    `puppeteer-core`, renders correctly every time, both mobile and desktop.
+    And the node-detail `Sheet` (opened by clicking a graph node) does not
+    overflow at 375px despite containing the same long-address/`break-all`
+    shape as the earlier case-detail header bug — probed it directly, zero
+    overflow.
+- **n8n live rehearsal — done, and it caught two real bugs in the committed
+  workflow JSON.** Item 6 was the last Day 3 open risk: the app-side code path
+  was verified but nobody had ever actually run the workflows in n8n. Docker
+  came back after the reboot (the stale `/lib/modules` mismatch is gone —
+  vermagic now matches the running 6.18.50-1-lts kernel), but the daemon still
+  failed to start: `nf_tables` wasn't loaded, so `iptables` couldn't
+  initialize nft and the bridge driver failed. `modprobe nf_tables` +
+  `systemctl reset-failed docker` (the crash loop had tripped
+  `start-limit-hit`) fixed it. Both workflows imported and activated against
+  `n8nio/n8n:latest`, both webhooks fired for real, both confirmed on n8n's
+  canvas. The two bugs, neither of which the app could have surfaced since
+  `notifyN8n` is fire-and-forget and only ever saw a `200`:
+  - **The IF node was dead.** `Is VASP/mixer reached?` was pinned to
+    `typeVersion: 1` with the legacy `conditions.boolean` shape. Current n8n
+    builds only ship IF v2–v2.3, and an unsupported v1 node does not error —
+    it silently sends every item down the **false** branch. So
+    `Push result to VASPtrace dashboard` could never have run, and the demo's
+    whole point (watching a VASP hit light up the canvas) would have failed
+    live while every execution still showed a green "Success". Migrated to
+    `typeVersion: 2.2` with the modern filter shape
+    (`operator: {type: boolean, operation: "true"}`) and left a note on the
+    node so nobody re-pins it.
+  - **Both Code nodes read the wrong object.** n8n's Webhook node nests the
+    POSTed JSON under `body` alongside `headers`/`query`/`params`, so
+    `$json.hitVaspOrMixer` was always `undefined` (false branch again, for a
+    second independent reason), and both HTTP nodes were forwarding the whole
+    request envelope — headers included — to the ack endpoints instead of the
+    trace/disclosure payload. Both Code nodes now unwrap
+    `$input.item.json.body ?? $input.item.json` (the fallback keeps manual
+    "Execute workflow" runs with pinned data working).
+  Verified after the fix, in this order: synthetic POST with
+  `hitVaspOrMixer: true` → true branch → `POST /api/n8n/trace-ack 200`;
+  synthetic POST with `false` → NoOp, no ack (so the branch is really
+  branching, not just always-true now); then the real runs — a live Ethereum
+  trace of `0x6eedf92fb92dd68a270c3205e96dccc527728066` (the WazirX headline
+  demo address) produced case `cmtsvq95e0000...`, `hitVaspOrMixer: true`,
+  `recommendedVasp: "WazirX"`, and n8n execution #6 shows the green path
+  running through the **true** branch into the dashboard push with the NoOp
+  left unexecuted; a real "Route disclosure request to WazirX" click produced
+  execution #7 carrying the actual case id, suspect address, evidence-trail
+  tx hash and `legalBasis`. Env wiring is `N8N_TRACE_WEBHOOK_URL` /
+  `N8N_SAHYOG_WEBHOOK_URL` in `.env` pointing at
+  `http://localhost:5678/webhook/vasptrace-{trace,sahyog}` — production paths,
+  not `/webhook-test/`, which only fire while the editor is listening.
+  Two operational notes for demo day: n8n now requires an owner account on
+  first boot (the `n8n_data` volume persists it, so this is a one-time setup
+  unless the volume is wiped), and an **active** workflow does not animate the
+  editor canvas — executions are visible under Executions, not by watching the
+  editor.
+- **"The UI changes aren't showing up" — a stale service worker, not our
+  code.** After the restart the app rendered in Times New Roman with no icons
+  and pre-polish class names (`text-2xl font-semibold` on the `h1` where the
+  source says `text-3xl font-bold tracking-tight`), which looked like a build
+  or Tailwind failure. It wasn't: `curl` showed the *server* returning correct
+  HTML the whole time. The cause was a leftover service worker registered on
+  `http://localhost:3000/` with a cache named `bookish-v1` — left behind by a
+  different project previously dev-served on that port. Service workers are
+  scoped per **origin**, not per project, so anything running on
+  `localhost:3000` inherits them; it was intercepting requests and hydrating
+  over the correct server HTML with an old app's cached bundle. (This also
+  explains the React hydration-mismatch error seen earlier the same session,
+  which was initially and wrongly written off as ordinary browser cache.)
+  Fixed by unregistering the worker and deleting the cache. **This is
+  per-browser-profile state, so it can reappear on any machine or Chrome
+  profile used at judging** — if the UI ever looks a version behind, check
+  DevTools → Application → Service Workers before touching the code, or dodge
+  the origin collision entirely with `npm run dev -- -p 3001`.
+
 ## Next up
 
 All ten plan items have a first pass — nothing blocks an end-to-end demo
@@ -195,15 +412,31 @@ demo-rehearsal, not new scope. See PLAN.md's
 ["Day-by-day schedule"](./PLAN.md#day-by-day-schedule-added-end-of-day-1)
 section for the actual breakdown. Items worth repeating here since they're
 open risks:
+- **Day 4 gained new scope (requested end of Day 3): a full visual overhaul.**
+  The Day 2 monochrome direction shipped but reads as too plain — Day 4 now
+  repaints the app around a blue palette, rebuilds `/` as a search-engine-style
+  landing page, and turns `/cases` into a stats dashboard. Full spec in
+  PLAN.md's Day 4 section. Three things worth knowing before starting:
+  - The "graph doesn't fit on screen after a trace" complaint is a **bug with
+    a known cause**, not a missing feature: `<ForceGraph2D>` in
+    `components/graph-view.tsx` is passed `height` but no `width`, so it
+    defaults to window width and lays the canvas out wider than its
+    container — the existing `zoomToFit` call is fitting to a canvas whose
+    edges are clipped. Fixing it is small; it does not need the redesign.
+  - Functional colour (risk badges, graph node-kind colours) must survive the
+    repaint intact — it encodes meaning. Only chrome goes blue.
+  - The repaint invalidates Day 3's contrast work: the `--risk-*` token pairs
+    were tuned to hit 4.5:1 against the *current* backgrounds, and
+    `lib/pdf/report.tsx` carries a duplicate literal hex map that has to move
+    with them. Re-verify both rather than assuming they still hold.
 - Item 1: no pagination on the Bitcoin/Tron fetchers (Blockstream caps at
   ~25 recent txs, Tronscan capped at 50) — fine for a demo trace, would
   matter for a real caseload.
-- Item 6: someone needs to actually `docker compose up`, import both
-  workflows, and confirm the canvas executes live during a real demo run —
-  the code path is verified, the n8n side isn't.
-- Day 2's still-open item: the UI redesign (monochrome + glassmorphism,
-  described in `PLAN.md`'s Day 2 section) hasn't been built yet — today's
-  session covered the other four Day 2 items (demo addresses, seed
-  breadth, clustering validation, pacing fix) per explicit priority order.
-- `lib/typology.ts`'s `FAN_OUT` threshold (≥3 destinations) over-triggers
-  on real busy addresses — see the clustering-validation entry above.
+- Item 6: **closed.** The live n8n rehearsal ran on Day 3 — both workflows
+  imported, activated and confirmed executing on the canvas from a real trace
+  and a real Sahyog click, after fixing two bugs in the committed workflow
+  JSON that only a live run could have exposed (see the 2026-09-09 changelog
+  entry). Residual risk is now setup-shaped, not correctness-shaped: n8n asks
+  for an owner account on first boot, so if the `n8n_data` volume is ever
+  recreated on demo day someone has to re-create that account before the
+  webhooks work.

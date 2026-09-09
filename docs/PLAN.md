@@ -211,7 +211,80 @@ report, mocked Sahyog routing, typology flags). Status/detail in
 - PDF report visual polish — functionally correct and legible already, room
   for letterhead/branding treatment.
 
-**Day 4 — Full dry-run + bug bash.**
+**Day 4 — Visual overhaul + full dry-run + bug bash.**
+
+> Scheduling note: the visual overhaul below was added at the end of Day 3 and
+> is genuinely new scope, not polish — it repaints the whole app and rebuilds
+> two pages. Day 4 was already a full dry-run plus bug bash. Do the overhaul
+> **first** and the dry-run **after**, never the reverse: a repaint is exactly
+> the kind of change that reintroduces the contrast and mobile-overflow bugs
+> Day 3 just fixed, so the bug bash has to run against the final look. If both
+> don't fit, the dry-run keeps its slot and the *beefy dashboard* (the biggest
+> and least demo-critical piece) is the thing to cut into Day 5's buffer.
+
+*Visual overhaul — direction: flashy, colourful, blue.* This supersedes Day 2's
+monochrome direction, which landed but reads as too plain. Same rule carries
+over though, and it is the one hard constraint: **functional colour stays
+functional.** Risk badges (green/amber/orange/red) and graph node-kind colours
+encode real meaning — they must not be absorbed into the blue scheme or the
+graph stops being readable at a glance. Blue is for *chrome*: backgrounds,
+cards, nav, buttons, headings, accents.
+
+- **Graph auto-focus on trace — this is a real bug, not a missing feature.**
+  `components/graph-view.tsx` already calls
+  `fgRef.current?.zoomToFit(400, 60)` on `onEngineStop` (line ~137), but the
+  `<ForceGraph2D>` gets `height={500}` and **no `width`**. `react-force-graph`
+  defaults width to the *window* width, so the canvas is laid out far wider
+  than its `w-full` container (~940px inside `max-w-5xl`) — `zoomToFit` then
+  fits the graph to a canvas whose sides are clipped, which is exactly the
+  "I have to zoom out and drag it into view" symptom. Fix: measure the
+  container (`ResizeObserver`) and pass an explicit `width`, then re-fit when
+  `graphData` changes, not only on `onEngineStop` (a second trace re-runs the
+  sim, and a settle that never fires leaves the camera wherever it was).
+  Verify at desktop *and* 375px, and with a 1-node graph (degenerate
+  `zoomToFit` case).
+- **Graph prettiness.** Custom `nodeCanvasObject` instead of default circles —
+  glow/halo on the suspect root, entity labels drawn on-canvas rather than
+  hover-only, thicker curved links (`linkCurvature`) and
+  `linkDirectionalParticles` to animate flow direction along the money trail
+  (this reads well on a projector and sells the "tracing" story). Add a small
+  legend for node kinds/risk, since the colour coding is currently
+  undiscoverable without hovering.
+- **Site-wide blue palette.** Rework the theme tokens in `app/globals.css`
+  (that's the single source — every page consumes them). Watch out: Day 3
+  introduced `--risk-*` light/dark token *pairs* specifically because one hex
+  couldn't hit 4.5:1 against both grounds. A blue repaint changes every
+  background those sit on, so **re-verify contrast after the repaint** rather
+  than assuming Day 3's numbers still hold. `lib/pdf/report.tsx` keeps its own
+  literal hex map (PDF can't read CSS vars) and must be updated in step or the
+  report will drift from the app.
+- **"New trace" as a search-engine page** (`app/page.tsx`). Centred hero,
+  large single prominent input, chain selector and depth as quiet secondary
+  controls rather than three equal-weight fields in a row; big product mark
+  above it; results render below the search after a trace, so the empty state
+  reads as a search landing page and the populated state as a results page.
+- **Dashboard, big and beefy, with stats** (`app/cases/page.tsx`). Currently a
+  plain table. All of the following come from the existing `Case` rows with
+  **no schema change** — `Case` already stores `chain`, `status`, `riskLevel`,
+  `recommendedVaspId`, `typologyFlags`, `createdAt` and the full
+  `traceResult` JSON:
+  - Headline stat tiles: total cases traced; disclosure requests routed
+    (`status = ROUTED`) vs traced; count of HIGH-risk cases.
+  - Risk-level distribution (HIGH/MEDIUM/LOW) — the one chart that most
+    justifies the "investigative tool" framing.
+  - Cases per chain (ETH/BTC/TRON).
+  - Most-recommended VASPs, by frequency of `recommendedVaspId` — directly
+    supports the item-3 differentiation story.
+  - Most-common typology flags across all cases.
+  - Traces over time from `createdAt` (sparkline) — cheap, and makes an
+    otherwise static dashboard look alive during a demo.
+  Two cautions: total-value-traced requires parsing `traceResult` JSON per
+  row, which is fine at demo volume but is an O(all cases) parse on every
+  dashboard load — leave a `ponytail:` note if it goes in. And every tile
+  needs a real zero state, since a freshly-seeded demo DB may have almost no
+  cases.
+
+*Then the original Day 4 work, run against the new look:*
 - Rehearse the exact judge-facing path end to end: paste address → live
   trace → graph → n8n canvas executing → scoring/recommendation → generate
   PDF → mock-route to VASP via n8n. Time it.

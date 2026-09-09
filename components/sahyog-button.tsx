@@ -45,7 +45,10 @@ export function SahyogButton({
           <Send className="size-4" />
           {loading ? "Routing…" : routed ? `Re-route to ${vaspName}` : `Route disclosure request to ${vaspName}`}
         </Button>
-        <Badge variant="outline" className="border-amber-600 text-amber-600">
+        <Badge
+          variant="outline"
+          className="whitespace-normal border-amber-700 text-amber-700 dark:border-amber-400 dark:text-amber-400"
+        >
           Simulated integration — Sahyog API access not publicly available
         </Badge>
       </div>

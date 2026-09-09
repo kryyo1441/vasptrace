@@ -17,7 +17,7 @@ import { GraphView } from "@/components/graph-view";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
 import { vaspLine } from "@/lib/format";
 import type { TraceGraph, TypologyFlag } from "@/lib/tracers/types";
-import { AlertTriangle, ArrowRight, Network, Shield, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2, Network, Shield, Wallet } from "lucide-react";
 
 const ADDRESS_PLACEHOLDER: Record<string, string> = {
   ETHEREUM: "0x… wallet address",
@@ -61,10 +61,10 @@ export default function Home() {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Shield className="size-5" />
+            <Shield className="size-5" aria-hidden="true" />
           </div>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">VASPtrace</h1>
@@ -78,7 +78,7 @@ export default function Home() {
           className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground underline-offset-4 hover:underline"
         >
           Case dashboard
-          <ArrowRight className="size-4" />
+          <ArrowRight className="size-4" aria-hidden="true" />
         </Link>
       </div>
 
@@ -92,8 +92,9 @@ export default function Home() {
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-4 sm:flex-row">
             <div className="relative w-full">
-              <Wallet className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Wallet className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input
+                aria-label="Wallet address"
                 placeholder={ADDRESS_PLACEHOLDER[chain]}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
@@ -101,7 +102,7 @@ export default function Home() {
               />
             </div>
             <Select value={chain} onValueChange={(v) => v && setChain(v)}>
-              <SelectTrigger className="w-full sm:w-40">
+              <SelectTrigger aria-label="Blockchain" className="w-full sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -111,6 +112,7 @@ export default function Home() {
               </SelectContent>
             </Select>
             <Input
+              aria-label="Max trace depth"
               type="number"
               min={1}
               max={10}
@@ -126,12 +128,21 @@ export default function Home() {
         </CardContent>
       </Card>
 
+      {loading && (
+        <Card>
+          <CardContent className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            Tracing on-chain hops — this can take a few seconds per hop…
+          </CardContent>
+        </Card>
+      )}
+
       {graph && (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
-                <Network className="size-4 text-muted-foreground" />
+                <Network className="size-4 text-muted-foreground" aria-hidden="true" />
                 Trace result — {graph.nodes.length} addresses, {graph.edges.length} transfers
               </CardTitle>
               {caseId && (
@@ -181,11 +192,26 @@ export default function Home() {
         </Card>
       )}
 
+      {graph && !graph.recommendation && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Shield className="size-4 text-muted-foreground" aria-hidden="true" />
+              Recommended VASP for disclosure request
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            No labeled VASP reached within {graph.maxDepth} hop{graph.maxDepth === 1 ? "" : "s"} — no disclosure
+            request can be recommended for this trace.
+          </CardContent>
+        </Card>
+      )}
+
       {graph?.recommendation && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Shield className="size-4 text-muted-foreground" />
+              <Shield className="size-4 text-muted-foreground" aria-hidden="true" />
               Recommended VASP for disclosure request
               {graph.recommendation.alternatives.length > 0 &&
                 ` — ${graph.recommendation.top.vaspName} over ${graph.recommendation.alternatives[0].vaspName}`}

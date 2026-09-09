@@ -6,16 +6,9 @@ import { SahyogButton } from "@/components/sahyog-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
-import { vaspLine } from "@/lib/format";
+import { vaspLine, RISK_COLOR } from "@/lib/format";
 import type { TraceGraph } from "@/lib/tracers/types";
 import { AlertTriangle, ArrowLeft, FileText, Network, Shield, Wallet } from "lucide-react";
-
-const RISK_COLOR: Record<string, string> = {
-  LOW: "#16a34a",
-  MEDIUM: "#ca8a04",
-  HIGH: "#ea580c",
-  CRITICAL: "#dc2626",
-};
 
 export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -27,24 +20,24 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-8">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
           <Link
             href="/cases"
             className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:underline"
           >
-            <ArrowLeft className="size-3" />
+            <ArrowLeft className="size-3" aria-hidden="true" />
             Case dashboard
           </Link>
-          <h1 className="mt-1 flex items-center gap-2 font-mono text-lg font-semibold break-all">
-            <Wallet className="size-4 shrink-0 text-muted-foreground" />
+          <h1 className="mt-1 flex min-w-0 items-center gap-2 font-mono text-lg font-semibold break-all">
+            <Wallet className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             {kase.address}
           </h1>
           <p className="text-sm text-muted-foreground">
             {kase.chain} · opened {kase.createdAt.toLocaleString()}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {kase.riskLevel && (
             <Badge variant="outline" style={{ borderColor: RISK_COLOR[kase.riskLevel], color: RISK_COLOR[kase.riskLevel] }}>
               {kase.riskLevel}
@@ -56,7 +49,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
               href={`/api/cases/${kase.id}/report`}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium backdrop-blur-xl hover:bg-accent"
             >
-              <FileText className="size-4" />
+              <FileText className="size-4" aria-hidden="true" />
               Download PDF report
             </a>
           )}
@@ -93,11 +86,26 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
         <p className="text-sm text-muted-foreground">No trace data stored for this case.</p>
       )}
 
+      {graph && !graph.recommendation && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Shield className="size-4 text-muted-foreground" aria-hidden="true" />
+              Recommended VASP for disclosure request
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            No labeled VASP reached within {graph.maxDepth} hop{graph.maxDepth === 1 ? "" : "s"} — no disclosure
+            request can be recommended for this trace.
+          </CardContent>
+        </Card>
+      )}
+
       {graph?.recommendation && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Shield className="size-4 text-muted-foreground" />
+              <Shield className="size-4 text-muted-foreground" aria-hidden="true" />
               Recommended VASP for disclosure request
             </CardTitle>
           </CardHeader>

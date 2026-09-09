@@ -83,6 +83,15 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /* Risk-level functional colors (PLAN.md: keep these meaningful, don't
+     flatten into monochrome — but they still need a light/dark pair to hit
+     WCAG AA text contrast; the -700-ish light values below are darker than
+     the raw brand hues used elsewhere so they hold 4.5:1+ against the light
+     card background. */
+  --risk-low: #15803d;
+  --risk-medium: #a16207;
+  --risk-high: #c2410c;
+  --risk-critical: #b91c1c;
 }
 
 .dark {
@@ -117,6 +126,11 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  /* Lighter pair for the dark card background — see the :root comment. */
+  --risk-low: #4ade80;
+  --risk-medium: #fbbf24;
+  --risk-high: #fb923c;
+  --risk-critical: #f87171;
 }
 
 @layer base {

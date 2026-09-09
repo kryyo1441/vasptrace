@@ -3,22 +3,37 @@
 // the report always matches exactly what was shown on screen at trace time.
 import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
-import type { Case } from "@/lib/generated/prisma/client";
+import type { Case, RiskLevel } from "@/lib/generated/prisma/client";
 import type { TraceGraph } from "@/lib/tracers/types";
+
+// react-pdf renders to a static, always-white page — it can't consume the
+// CSS custom properties lib/format.ts's RISK_COLOR uses for the (light/dark
+// theme-aware) web UI. Keep this in sync with app/globals.css's :root
+// (light-mode) --risk-* values if those ever change.
+const RISK_COLOR_PRINT: Record<RiskLevel, string> = {
+  LOW: "#15803d",
+  MEDIUM: "#a16207",
+  HIGH: "#c2410c",
+  CRITICAL: "#b91c1c",
+};
 
 const styles = StyleSheet.create({
   page: { padding: 36, fontSize: 10, fontFamily: "Helvetica", color: "#1a1a1a" },
   header: { flexDirection: "row", justifyContent: "space-between", borderBottom: "2 solid #1a1a1a", paddingBottom: 8, marginBottom: 16 },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  mark: { width: 22, height: 22, backgroundColor: "#1a1a1a", borderRadius: 5, alignItems: "center", justifyContent: "center" },
+  markText: { color: "#fff", fontFamily: "Helvetica-Bold", fontSize: 12 },
   title: { fontSize: 16, fontFamily: "Helvetica-Bold" },
   subtitle: { fontSize: 9, color: "#555", marginTop: 2 },
   section: { marginBottom: 14 },
-  sectionTitle: { fontSize: 11, fontFamily: "Helvetica-Bold", marginBottom: 6, textTransform: "uppercase" },
+  sectionTitle: { fontSize: 11, fontFamily: "Helvetica-Bold", marginBottom: 6, textTransform: "uppercase", borderBottom: "1 solid #ddd", paddingBottom: 3 },
   row: { flexDirection: "row", marginBottom: 3 },
   label: { width: 140, color: "#555" },
   value: { flex: 1, fontFamily: "Helvetica-Bold" },
   hop: { marginBottom: 4, paddingLeft: 8, borderLeft: "2 solid #ccc" },
   mono: { fontFamily: "Courier" },
   badge: { fontSize: 8, backgroundColor: "#eee", padding: "2 5", marginRight: 4, borderRadius: 2 },
+  riskBadge: { fontSize: 9, fontFamily: "Helvetica-Bold", borderWidth: 1, borderRadius: 3, paddingVertical: 2, paddingHorizontal: 6, alignSelf: "flex-start" },
   footer: { position: "absolute", bottom: 24, left: 36, right: 36, fontSize: 8, color: "#888", borderTop: "1 solid #ccc", paddingTop: 6, flexDirection: "row", justifyContent: "space-between" },
   simulatedNote: { fontSize: 8, color: "#b45309", marginTop: 2, fontStyle: "italic" },
 });
@@ -34,9 +49,14 @@ export function CaseReportDocument({ kase, graph }: { kase: Case; graph: TraceGr
     <Document title={`VASPtrace Investigation Report — Case ${kase.id}`}>
       <Page size="A4" style={styles.page}>
         <View style={styles.header} fixed>
-          <View>
-            <Text style={styles.title}>VASPtrace Investigation Report</Text>
-            <Text style={styles.subtitle}>Blockchain intelligence — Smart India Hackathon PS 26182 (MHA / I4C)</Text>
+          <View style={styles.brandRow}>
+            <View style={styles.mark}>
+              <Text style={styles.markText}>V</Text>
+            </View>
+            <View>
+              <Text style={styles.title}>VASPtrace Investigation Report</Text>
+              <Text style={styles.subtitle}>Blockchain intelligence — Smart India Hackathon PS 26182 (MHA / I4C)</Text>
+            </View>
           </View>
           <View>
             <Text style={styles.subtitle}>Case ID: {kase.id}</Text>
@@ -72,7 +92,14 @@ export function CaseReportDocument({ kase, graph }: { kase: Case; graph: TraceGr
           <Text style={styles.sectionTitle}>Risk classification</Text>
           <View style={styles.row}>
             <Text style={styles.label}>Risk level</Text>
-            <Text style={styles.value}>{kase.riskLevel ?? "LOW"}</Text>
+            <Text
+              style={[
+                styles.riskBadge,
+                { color: RISK_COLOR_PRINT[kase.riskLevel ?? "LOW"], borderColor: RISK_COLOR_PRINT[kase.riskLevel ?? "LOW"] },
+              ]}
+            >
+              {kase.riskLevel ?? "LOW"}
+            </Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>Typology flags (heuristic)</Text>

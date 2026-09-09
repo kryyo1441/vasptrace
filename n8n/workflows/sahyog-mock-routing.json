@@ -22,7 +22,7 @@
       "notes": "SIH plan item 9 — Sahyog API access isn't publicly available. This node just annotates the already-built simulated payload (built server-side in app/api/cases/[id]/sahyog/route.ts) as it flows across the canvas for the demo.",
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const p = $input.item.json;\nreturn {\n  json: {\n    ...p,\n    routedVia: \"n8n mock workflow (no real Sahyog endpoint exists)\"\n  }\n};"
+        "jsCode": "// The Webhook node nests the POSTed JSON under `body` — unwrap it so the\n// HTTP node downstream forwards the disclosure payload itself rather than\n// the request envelope (headers/query/params). Falls back to the item as-is\n// so manual \"Execute workflow\" runs with pinned data still work.\nconst p = $input.item.json.body ?? $input.item.json;\nreturn {\n  json: {\n    ...p,\n    routedVia: \"n8n mock workflow (no real Sahyog endpoint exists)\"\n  }\n};"
       }
     },
     {

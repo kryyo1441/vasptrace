@@ -22,24 +22,39 @@
       "notes": "Real labeling already ran server-side in Next.js (lib/tracers/bfs.ts) before this webhook fired — this node mirrors that pipeline stage for demo visibility only, per PLAN.md item 6. It does not re-run the label lookup.",
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const t = $input.item.json;\nreturn {\n  json: {\n    ...t,\n    pipelineStage: \"labeled-db-checked\",\n    note: \"Labeling already happened in Next.js — this node is a visibility mirror, not the real check.\"\n  }\n};"
+        "jsCode": "// The Webhook node nests the POSTed JSON under `body` — unwrap it so the\n// IF node and the HTTP node downstream see the trace payload itself rather\n// than the request envelope (headers/query/params). Falls back to the item\n// as-is so manual \"Execute workflow\" runs with pinned data still work.\nconst t = $input.item.json.body ?? $input.item.json;\nreturn {\n  json: {\n    ...t,\n    pipelineStage: \"labeled-db-checked\",\n    note: \"Labeling already happened in Next.js — this node is a visibility mirror, not the real check.\"\n  }\n};"
       }
     },
     {
       "id": "if-vasp-or-mixer",
       "name": "Is VASP/mixer reached?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2.2,
       "position": [680, 300],
+      "notes": "Must stay on typeVersion 2.x: the legacy v1 `conditions.boolean` shape is no longer supported by current n8n builds and silently routes every item down the false branch instead of erroring.",
       "parameters": {
         "conditions": {
-          "boolean": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
             {
-              "value1": "={{ $json.hitVaspOrMixer }}",
-              "value2": true
+              "id": "hit-vasp-or-mixer",
+              "leftValue": "={{ $json.hitVaspOrMixer }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       }
     },
     {

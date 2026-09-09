@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { TraceGraph, TraceNode, TypologyFlag } from "@/lib/tracers/types";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
@@ -70,6 +70,23 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
   const [selected, setSelected] = useState<TraceNode | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ForceGraphMethods generic doesn't survive next/dynamic
   const fgRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  // ForceGraph2D defaults its width to window.innerWidth, not its parent, so
+  // without this the canvas is laid out far wider than the container and
+  // zoomToFit centres the graph into the clipped-off region.
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    // Seed synchronously: when the graph mounts after a trace completes the
+    // observer's first callback can land too late (or not at all) and the
+    // canvas stays 0-wide.
+    setWidth(el.clientWidth);
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const graphData = useMemo(() => {
     const byDepth = new Map<number, string[]>();
@@ -105,10 +122,21 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
     return { nodes, links };
   }, [graph]);
 
+  // onEngineStop alone isn't enough: nodes get radial start positions, so a
+  // small graph can settle (and fit) before the measured width lands, leaving
+  // the camera framed for the wrong canvas size.
+  useEffect(() => {
+    if (width > 0) fgRef.current?.zoomToFit(400, 60);
+  }, [width, graphData]);
+
   return (
-    <div className="relative h-[500px] w-full overflow-hidden rounded-xl border border-border bg-card backdrop-blur-xl">
+    <div
+      ref={containerRef}
+      className="relative h-[500px] w-full overflow-hidden rounded-xl border border-border bg-card backdrop-blur-xl"
+    >
       <ForceGraph2D
         ref={fgRef}
+        width={width}
         graphData={graphData}
         nodeId="id"
         nodeLabel={(n) => {

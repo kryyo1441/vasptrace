@@ -22,13 +22,24 @@ const edge = (from: string, to: string, valueWei: string): TraceEdge => ({
   typologyFlags: [],
 });
 
-// Fan-out: one node splitting to 3+ destinations.
+// Fan-out: one node splitting to FAN_OUT_MIN_DESTINATIONS (5) destinations.
+{
+  const dests = ["b", "c", "d", "e", "f"];
+  const nodes = [node("a", 0), ...dests.map((d) => node(d, 1))];
+  const edges = dests.map((d) => edge("a", d, "1"));
+  applyTypologyFlags(nodes, edges);
+  assert.deepEqual(nodes[0].typologyFlags, ["FAN_OUT"]);
+  assert(edges.every((e) => e.typologyFlags.includes("FAN_OUT")));
+}
+
+// Below the threshold (3 destinations) -> not flagged. Old threshold was 3;
+// raised to 5 because 3 mostly just detected bfs.ts's own FANOUT_CAP
+// truncation, not real fan-out — see the comment on FAN_OUT_MIN_DESTINATIONS.
 {
   const nodes = [node("a", 0), node("b", 1), node("c", 1), node("d", 1)];
   const edges = [edge("a", "b", "1"), edge("a", "c", "1"), edge("a", "d", "1")];
   applyTypologyFlags(nodes, edges);
-  assert.deepEqual(nodes[0].typologyFlags, ["FAN_OUT"]);
-  assert(edges.every((e) => e.typologyFlags.includes("FAN_OUT")));
+  assert.deepEqual(nodes[0].typologyFlags, []);
 }
 
 // Peel chain: 2 destinations, one leg >=4x the other.
