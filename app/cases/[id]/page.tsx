@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { canAccessCase, getCurrentUser } from "@/lib/auth";
 import { GraphView } from "@/components/graph-view";
 import { SahyogButton } from "@/components/sahyog-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,8 +16,16 @@ import { VaspScoreGauge } from "@/components/vasp-score-gauge";
 
 export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
   const kase = await prisma.case.findUnique({ where: { id } });
-  if (!kase) notFound();
+  // Same response (404) whether the case doesn't exist or belongs to a
+  // different investigator — a distinct "yes this exists, you can't see
+  // it" response would confirm a case id belongs to someone by its mere
+  // existence, the same enumeration concern as the login route's identical
+  // error for "no such user" vs. "wrong password".
+  if (!kase || !canAccessCase(user, kase)) notFound();
 
   const graph: TraceGraph | null = kase.traceResult ? JSON.parse(kase.traceResult) : null;
   const typologyFlags: string[] = kase.typologyFlags ? JSON.parse(kase.typologyFlags) : [];

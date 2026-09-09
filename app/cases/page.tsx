@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RankedBarChart, Sparkline } from "@/components/dashboard-charts";
@@ -48,8 +50,20 @@ function StatTile({
 }
 
 export default async function CasesPage() {
+  // proxy.ts already turns away requests with no session, but per Next's
+  // own proxy docs, re-check here rather than trust the matcher covered
+  // this route — and RBAC needs the current user's role/id regardless.
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
   const [cases, vasps] = await Promise.all([
-    prisma.case.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.case.findMany({
+      // SUPERVISOR sees every case; INVESTIGATOR only their own. Same rule
+      // as lib/auth.ts's canAccessCase, applied here as a query filter
+      // instead of a post-fetch check since this is a list, not one case.
+      where: user.role === "SUPERVISOR" ? {} : { createdById: user.id },
+      orderBy: { createdAt: "desc" },
+    }),
     prisma.vaspRegistry.findMany(),
   ]);
   const vaspName = new Map(vasps.map((v) => [v.id, v.name]));

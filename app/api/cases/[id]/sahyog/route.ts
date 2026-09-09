@@ -5,12 +5,22 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { notifyN8n } from "@/lib/n8n";
 import { LEGAL_BASIS } from "@/lib/format";
+import { canAccessCase, getCurrentUser } from "@/lib/auth";
 import type { TraceGraph } from "@/lib/tracers/types";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // proxy.ts gates login; this route re-checks and authorizes the specific
+  // case, not just that a session exists — otherwise investigator A could
+  // route a disclosure request on investigator B's case by guessing/
+  // enumerating a cuid.
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const kase = await prisma.case.findUnique({ where: { id } });
-  if (!kase) {
+  if (!kase || !canAccessCase(user, kase)) {
     return NextResponse.json({ error: "Case not found" }, { status: 404 });
   }
   if (!kase.recommendedVaspId) {

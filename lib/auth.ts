@@ -90,3 +90,13 @@ export async function getCurrentUser() {
   const user = await prisma.user.findUnique({ where: { id: session.uid } });
   return user;
 }
+
+// Object-level authorization — gating login isn't the same as authorizing
+// access to a specific case (see proxy.ts's comment: the matcher only
+// proves *a* session exists, not that this session owns this case).
+// SUPERVISOR sees everything; INVESTIGATOR only their own. Used identically
+// in app/cases/[id]/page.tsx, the report route, and the Sahyog route so the
+// rule can't drift between the three places that fetch a Case by id.
+export function canAccessCase(user: { id: string; role: Role }, kase: { createdById: string | null }): boolean {
+  return user.role === "SUPERVISOR" || kase.createdById === user.id;
+}
