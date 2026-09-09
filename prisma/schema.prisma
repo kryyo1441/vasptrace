@@ -61,6 +61,27 @@ enum RiskLevel {
   CRITICAL
 }
 
+enum Role {
+  INVESTIGATOR
+  SUPERVISOR
+}
+
+// Auth (SIH plan: reversed into scope 2026-09-09, was "single-user demo is
+// fine" on day 1 — see PLAN.md's "Final stretch" section for why). Hand-
+// rolled session auth over next-auth: one credentials flow doesn't need a
+// provider/adapter framework, and next-auth v5 is still beta this close to
+// submission. Password hashing is Node's stdlib scrypt (lib/auth.ts), not a
+// new dependency.
+model User {
+  id           String @id @default(cuid())
+  username     String @unique
+  passwordHash String
+  passwordSalt String
+  role         Role   @default(INVESTIGATOR)
+  cases        Case[]
+  createdAt    DateTime @default(now())
+}
+
 model Case {
   id                 String     @id @default(cuid())
   address            String
@@ -73,6 +94,14 @@ model Case {
   // Roadmap only, unused: would flip once a VASP confirms/denies a disclosure
   // request back through a real Sahyog integration.
   confirmedByVaspResponse Boolean @default(false)
+  // Nullable, not required — the 81 cases traced before auth existed have no
+  // creator. Backfilled to a seeded demo investigator (see prisma/seed.ts)
+  // rather than left null, so the dashboard/pitch numbers ("81 real cases")
+  // stay demonstrable under RBAC instead of reading as empty for that user.
+  createdById        String?
+  createdBy          User?      @relation(fields: [createdById], references: [id])
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
+
+  @@index([createdById])
 }

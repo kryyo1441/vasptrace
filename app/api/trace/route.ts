@@ -5,6 +5,7 @@ import { traceTron } from "@/lib/tracers/tron";
 import { deriveRiskLevel } from "@/lib/scoring";
 import { notifyN8n } from "@/lib/n8n";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
 import type { Chain } from "@/lib/generated/prisma/client";
 import type { TraceGraph } from "@/lib/tracers/types";
 
@@ -21,6 +22,14 @@ const TRACERS: Record<Chain, (address: string, maxDepth: number) => Promise<Trac
 };
 
 export async function POST(req: NextRequest) {
+  // proxy.ts already turns away unauthenticated requests, but per Next's
+  // own guidance (see proxy.ts's comment), re-check here rather than trust
+  // the matcher covered this route.
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const body = await req.json().catch(() => null);
   if (!body) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
@@ -60,6 +69,7 @@ export async function POST(req: NextRequest) {
         recommendedVaspId: graph.recommendation?.top.vaspName ?? null,
         traceResult: JSON.stringify(graph),
         typologyFlags: JSON.stringify(typologyFlags),
+        createdById: user.id,
       },
     });
 

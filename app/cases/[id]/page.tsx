@@ -10,6 +10,7 @@ import { vaspLine, RISK_COLOR } from "@/lib/format";
 import type { TraceGraph } from "@/lib/tracers/types";
 import { AlertTriangle, ArrowLeft, FileText, Network, Shield, Wallet } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserMenu } from "@/components/user-menu";
 import { VaspScoreGauge } from "@/components/vasp-score-gauge";
 
 export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -56,6 +57,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
             </a>
           )}
           <ThemeToggle />
+          <UserMenu />
         </div>
       </div>
 

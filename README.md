@@ -13,14 +13,28 @@ current status.
 
 ```bash
 npm install
-cp .env.example .env   # fill in ETHERSCAN_API_KEY at minimum — get one free at etherscan.io/apis
+cp .env.example .env   # fill in ETHERSCAN_API_KEY and SESSION_SECRET — see below
 npx prisma migrate dev # creates dev.db and applies prisma/migrations
-npm run db:seed        # loads real labeled addresses + VASP registry
+npm run db:seed        # loads real labeled addresses + VASP registry + demo accounts
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Paste a wallet address,
-pick a chain (Ethereum, Bitcoin, or Tron all trace live), run a trace.
+Open [http://localhost:3000](http://localhost:3000) — you'll land on a login
+page. Sign in with one of the two demo accounts `npm run db:seed` creates
+(**rotate these before any real deployment**):
+
+| Username | Password | Role |
+|---|---|---|
+| `investigator` | `vasptrace-investigator-2026` | Investigator — sees own cases |
+| `supervisor` | `vasptrace-supervisor-2026` | Supervisor — sees all cases |
+
+`ETHERSCAN_API_KEY` — get one free at etherscan.io/apis. `SESSION_SECRET` —
+any long random string, e.g. `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`;
+the app refuses to boot without it rather than silently signing sessions
+with `undefined`.
+
+Once signed in, paste a wallet address, pick a chain (Ethereum, Bitcoin, or
+Tron all trace live), run a trace.
 
 `TRONSCAN_API_KEY` in `.env.example` is optional — the Tron tracer works
 keyless at demo volume.

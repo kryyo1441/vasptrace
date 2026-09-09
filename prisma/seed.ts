@@ -1,8 +1,18 @@
 // Real, public seed data — no synthetic addresses.
 // Sources noted per entry. Extend this array to add more.
 import "dotenv/config";
-import { Chain, LabelType } from "../lib/generated/prisma/client";
+import { Chain, LabelType, Role } from "../lib/generated/prisma/client";
 import { prisma } from "../lib/prisma";
+import { hashPassword } from "../lib/auth";
+
+// Demo accounts only — rotate these before any real deployment. Two roles
+// so the RBAC story (investigators see their own cases, supervisors see
+// all) is demonstrable, not just a login screen. See docs/PLAN.md's "Final
+// stretch" for why auth exists at all.
+const demoUsers: { username: string; password: string; role: Role }[] = [
+  { username: "investigator", password: "vasptrace-investigator-2026", role: "INVESTIGATOR" },
+  { username: "supervisor", password: "vasptrace-supervisor-2026", role: "SUPERVISOR" },
+];
 
 // Every address below was individually verified against a block explorer or
 // the OFAC action itself before seeding (see source field). Do not add an
@@ -199,8 +209,34 @@ async function main() {
     });
   }
 
+  let firstInvestigatorId: string | null = null;
+  for (const u of demoUsers) {
+    const { salt, hash } = hashPassword(u.password);
+    const user = await prisma.user.upsert({
+      where: { username: u.username },
+      update: { passwordHash: hash, passwordSalt: salt, role: u.role },
+      create: { username: u.username, passwordHash: hash, passwordSalt: salt, role: u.role },
+    });
+    if (u.role === "INVESTIGATOR" && !firstInvestigatorId) firstInvestigatorId = user.id;
+  }
+
+  // Backfill: every Case traced before auth existed has createdById = null.
+  // Attribute them to the demo investigator rather than leaving them
+  // ownerless — otherwise RBAC (added right after this commit) makes the
+  // dashboard's "81 real cases" empty for anyone but a SUPERVISOR, which
+  // quietly breaks both the demo and docs/PITCH.md's numbers.
+  if (firstInvestigatorId) {
+    const backfilled = await prisma.case.updateMany({
+      where: { createdById: null },
+      data: { createdById: firstInvestigatorId },
+    });
+    if (backfilled.count > 0) {
+      console.log(`Backfilled ${backfilled.count} pre-auth cases to the demo investigator account.`);
+    }
+  }
+
   console.log(
-    `Seeded ${labeledAddresses.length} labeled addresses and ${vaspRegistry.length} VASP registry entries.`
+    `Seeded ${labeledAddresses.length} labeled addresses, ${vaspRegistry.length} VASP registry entries, and ${demoUsers.length} demo accounts.`
   );
 }
 

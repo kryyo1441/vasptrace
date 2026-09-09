@@ -19,6 +19,7 @@ import { vaspLine } from "@/lib/format";
 import type { TraceGraph, TypologyFlag } from "@/lib/tracers/types";
 import { AlertTriangle, ArrowRight, Loader2, Network, Search, Shield, Wallet } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserMenu } from "@/components/user-menu";
 import { VaspScoreGauge } from "@/components/vasp-score-gauge";
 
 const ADDRESS_PLACEHOLDER: Record<string, string> = {
@@ -73,6 +74,7 @@ export default function Home() {
           <ArrowRight className="size-4" aria-hidden="true" />
         </Link>
         <ThemeToggle />
+        <UserMenu />
       </div>
 
       {/* Search-engine landing hero: centered mark, one dominant input, the

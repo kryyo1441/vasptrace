@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RankedBarChart, Sparkline } from "@/components/dashboard-charts";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserMenu } from "@/components/user-menu";
 import { FolderOpen, Plus, Layers, Send, ShieldAlert, TrendingUp, type LucideIcon } from "lucide-react";
 import { CHAIN_LABEL, RISK_COLOR } from "@/lib/format";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
@@ -125,6 +126,7 @@ export default async function CasesPage() {
             New trace
           </Link>
           <ThemeToggle />
+          <UserMenu />
         </div>
       </div>
 
