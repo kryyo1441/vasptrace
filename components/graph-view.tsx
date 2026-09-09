@@ -224,10 +224,16 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
           ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
           ctx.stroke();
 
-          // On-canvas label — text drawn directly rather than hover-only,
-          // so the trail reads at a glance on a projector. Skip while
-          // heavily zoomed out (labels would overlap/blur into noise).
-          if (globalScale > 1.1) {
+          // On-canvas label — only for nodes that actually carry meaning:
+          // the suspect root (the anchor of the whole trace) and anything
+          // with a real entity name ("Binance 14", "Tornado Cash"). An
+          // anonymous intermediary's shortened hex tells a viewer nothing
+          // at a glance, and labelling all of them was the actual bug on
+          // ETH traces: 40+ chips overlapping into a ragged mess. Their
+          // full address is still one hover (tooltip) or one click (detail
+          // sheet) away. Also skipped while zoomed far out.
+          const labelWorthShowing = node.kind === "SUSPECT" || !!node.entityName;
+          if (globalScale > 1.1 && labelWorthShowing) {
             const label = node.entityName ?? short(node.address);
             const fontSize = Math.max(10 / globalScale, 3.4);
             ctx.font = `${node.kind === "SUSPECT" ? "600" : "400"} ${fontSize}px system-ui, sans-serif`;
