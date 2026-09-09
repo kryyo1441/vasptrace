@@ -580,33 +580,86 @@ the cache directly in the browser tab.
     `dark:scale-0`/`dark:scale-100` — sidesteps the client-only state
     entirely rather than suppressing the lint rule.
 
+### 2026-09-09 — Auth (final-stretch item 1, both phases)
+
+Landed in two commits on purpose (see `PLAN.md`'s "Final stretch" for the
+full reasoning on why auth reversed into scope, and why hand-rolled over
+`next-auth`) — phase 1 (login gate, sessions, demo accounts) first so there
+was a working, verified checkpoint to fall back to before phase 2 (RBAC)
+touched four more files.
+
+- **Phase 1**: `lib/auth.ts` (scrypt password hashing + HMAC-signed session
+  cookie, both Node stdlib, no new dependency), `proxy.ts` gating every
+  route except `/login`, its own API, and the n8n ack endpoints (excluded
+  deliberately — they're called server-to-server by n8n with no browser
+  session, and editing the workflow JSONs to add a header guard would mean
+  re-importing and re-verifying in n8n over files that took two days to get
+  right, for endpoints that only log receipt). `User` model + nullable
+  `Case.createdById` — nullable specifically because a required column
+  with no default on an 81-row SQLite table is the shape that forces a
+  destructive reset; backed up `dev.db` before migrating anyway, confirmed
+  all 81 rows survived the table rebuild. `prisma/seed.ts` backfills every
+  pre-auth case to a seeded demo investigator rather than leaving
+  `createdById` null, specifically so the dashboard's "81 real cases" and
+  `docs/PITCH.md`'s numbers stay demonstrable once RBAC lands.
+  - **Real finding while reading docs before writing code** (per
+    `AGENTS.md`'s instruction, not skipped this time):
+    `node_modules/next/dist/docs/.../file-conventions/middleware.md` says
+    `middleware.js` was deprecated and renamed to `proxy.js` in Next 16 —
+    the old filename silently does nothing. The same docs also confirm
+    Proxy defaults to the Node.js runtime in this version, which resolved
+    a real Edge-runtime concern (raised in review before any code was
+    written) about whether `node:crypto` would even be available for the
+    session check.
+- **Phase 2**: `lib/auth.ts`'s `canAccessCase(user, kase)` — one function
+  used identically in `app/cases/[id]/page.tsx`, the PDF report route, and
+  the Sahyog route, so the SUPERVISOR-bypass rule can't drift between the
+  three places that fetch a Case by id. `app/cases/page.tsx`'s list query
+  itself is filtered, not just the render. All four denials return 404,
+  not 403 — same "don't confirm the thing exists" reasoning the login
+  route already used for wrong-username vs. wrong-password.
+- **Verified live, both phases, not by code review alone**: a real login
+  driven through the actual form (redirect round-trips the original
+  destination via a `next` param correctly); wrong password → 401, correct
+  → signed cookie; authenticated trace/PDF/Sahyog all still work exactly as
+  before; the n8n ack route still reachable with zero session. For RBAC
+  specifically: logged in as both seeded accounts, had the supervisor trace
+  a fresh case, then confirmed the investigator gets 404 from all three of
+  the case-detail page, the PDF route, and the Sahyog route for that
+  specific case (not just the list) — while the supervisor's own access to
+  it kept working. Case counts confirmed via the actual rendered stat
+  tile: investigator 81, supervisor 82.
+- **Two stale-Turbopack-module errors mid-verification**, neither a real
+  code bug: a Prisma client that hadn't picked up `prisma generate` (the
+  long-running dev server had it module-cached from before the schema
+  changed), then — after restarting for that — a route handler that hadn't
+  picked up a newly-added `lib/auth.ts` export while the page component
+  right next to it had, in the same dev session. Both resolved by a full
+  restart with `.next` cleared. Worth naming as a pattern now: this is the
+  second time in this project a stale-module symptom looked like a code
+  bug and wasn't (the first was the risk-badge/service-worker confusion on
+  Day 3) — if a change that should obviously work doesn't, check for a
+  stale dev-server module cache before re-reading the diff.
+
 ## Next up
 
 All ten original plan items have a first pass and the app is demo-ready
 end to end. Real submission deadline is **2 days out, ~4 working windows**
 — see `PLAN.md`'s "Final stretch" section (right after the old "Day 5 —
 Buffer + pitch" stub, which it supersedes) for the authoritative priority
-order. Summary, most urgent first:
+order. **Item 1 (auth + RBAC) is done** — both phases shipped and verified
+live, see the changelog entry above. Next up, in order: n8n re-verification
+(once Docker is up) including confirming the ack routes still work
+unauthenticated through the new proxy gate, the small untested edges, then
+the pitch rehearsal. Summary of what was already open before auth landed,
+most urgent first:
 
-1. **Auth + RBAC — new scope, in progress.** Reversed the day-1
-   "single-user demo is fine" call after the user raised a real
-   confidentiality question: wallet addresses are already public on-chain
-   data (hashing them or writing them to a chain doesn't hide anything —
-   whoever wants to check a candidate address already has it, so an
-   unsalted-in-effect lookup is trivial either way; see the 2026-09-09
-   conversation if this needs re-explaining to someone else on the team),
-   but *this app associating an address with an active investigation* is
-   real, sensitive metadata, and today there's no login gating it at all.
-   Design (full detail in `PLAN.md`): hand-rolled session auth over
-   `next-auth` (avoids a beta dependency two days before submission) using
-   Node's stdlib `crypto.scrypt`/`timingSafeEqual` + an HMAC-signed cookie,
-   `middleware.ts` gating every route except `/login`, and RBAC via a new
-   `Case.createdById` so investigators see only their own cases and
-   supervisors see all. **Watch point going in**: `/api/n8n/*-ack` routes
-   are called by n8n itself, server-to-server, with no browser session — a
-   blanket auth gate over `/api/*` would break the n8n rehearsal that took
-   two days to get right last week. Those two routes need a shared-secret
-   header, not the session cookie.
+1. **Auth + RBAC — done.** See the 2026-09-09 "Auth" changelog entry above
+   for the full design and what was verified. Login gate, sessions, RBAC
+   (investigators see their own cases, supervisors see all), object-level
+   authorization on the case-detail/PDF/Sahyog routes, n8n ack routes
+   confirmed still reachable unauthenticated. Demo credentials in
+   `README.md`.
 - **Day 4's visual overhaul is done** — blue repaint, search-engine `/`,
   stats dashboard `/cases`, graph prettiness (glow, curved/animated links,
   legend). See the 2026-09-09 Day 4 changelog entry for what changed and

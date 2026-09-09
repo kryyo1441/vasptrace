@@ -318,7 +318,20 @@ Real submission deadline is 2 days out from here, not the end of "day 5"
 above — the original day-by-day numbering undercounted. Priority order for
 what's actually left, replacing the "Day 5 — Buffer + pitch" stub above:
 
-**1. Auth + RBAC (new scope, reversing the day-1 "Out of scope" call).**
+**1. Auth + RBAC — DONE (2026-09-09).** See `PROGRESS.md`'s "Auth"
+changelog entry for what actually shipped and was verified. Landed
+essentially as planned below, with two corrections worth flagging since
+this section is what someone would follow if they re-read it: the file is
+`proxy.ts`, not `middleware.ts` — Next 16 deprecated and renamed the
+convention (confirmed in `node_modules/next/dist/docs/` before writing any
+code, not discovered by trial and error); and the n8n ack routes ended up
+excluded from the auth gate entirely rather than given a shared-secret
+header, since that would have meant editing and re-verifying the workflow
+JSONs for no real security gain (they only log receipt). Original plan
+text kept below as the record of the design reasoning, not edited to match
+after the fact.
+
+**Original plan (new scope, reversing the day-1 "Out of scope" call):**
 Prompted by a real security question, not feature creep: wallet addresses
 themselves are public on-chain data (hashing them or writing them to a
 chain does nothing useful — see `PROGRESS.md`'s reasoning if it's ever
