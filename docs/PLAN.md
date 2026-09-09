@@ -294,7 +294,11 @@ cards, nav, buttons, headings, accents.
   to a clear UI state, not a blank page or unhandled error.
 - Fix whatever the bug bash turns up.
 
-**Day 5 — Buffer + pitch.**
+**Day 5 — Buffer + pitch.** *(superseded below — kept for history, not
+current scope. The original plan assumed submission at the end of day 5;
+the real deadline landed 2 days later, and auth got explicitly pulled back
+into scope by the user on 2026-09-09, reversing the "Out of scope for 5
+days" call below.)*
 - Buffer for day 4's fallout.
 - `docs/ARCHITECTURE.md` is written to be pitch-deck-liftable
   (deliverable 5) — do the actual lift and rehearse the narrative,
@@ -304,3 +308,70 @@ cards, nav, buttons, headings, accents.
 
 Out-of-scope items (bridge correlation, `confirmedByVaspResponse`, auth)
 stay out of scope through day 5 unless everything above finishes early.
+~~Auth~~ — **reversed 2026-09-09**, see below.
+
+---
+
+## Final stretch (added 2026-09-09) — 2 days, ~4 working windows left
+
+Real submission deadline is 2 days out from here, not the end of "day 5"
+above — the original day-by-day numbering undercounted. Priority order for
+what's actually left, replacing the "Day 5 — Buffer + pitch" stub above:
+
+**1. Auth + RBAC (new scope, reversing the day-1 "Out of scope" call).**
+Prompted by a real security question, not feature creep: wallet addresses
+themselves are public on-chain data (hashing them or writing them to a
+chain does nothing useful — see `PROGRESS.md`'s reasoning if it's ever
+re-litigated), but *this app associating a specific address with an active
+I4C investigation* is exactly the kind of fact that should not be
+readable by anyone who can reach the URL. Today it is — there's no login
+at all. Scoped tightly for the remaining time, not full IAM:
+- **Hand-rolled session auth, not next-auth** — deliberate call. next-auth
+  v5 is still beta, and pulls in provider/adapter/callback surface this
+  app doesn't need for one credentials flow. Node's stdlib
+  (`crypto.scrypt` + `timingSafeEqual` for password hashing, an
+  HMAC-signed cookie for the session) covers the actual requirement in
+  less code and less dependency risk two days before submission.
+- `User` model (Prisma): `username`, `passwordHash`, `passwordSalt`,
+  `role` (`INVESTIGATOR` | `SUPERVISOR`). Seed 2 demo accounts.
+- `middleware.ts` gates every route except `/login` — redirect
+  unauthenticated requests there.
+- **Real trap to avoid**: `app/api/n8n/{trace,sahyog}-ack/route.ts` are
+  called *by n8n itself*, server-to-server, with no browser session — a
+  blanket session-cookie gate over all of `/api/*` would silently break
+  the n8n rehearsal that already took two days to get right. Those two
+  routes need a separate guard (a shared-secret header checked against an
+  env var), not the session cookie.
+- RBAC: `Case` gains `createdById`. `/cases` and the trace API filter to
+  the current user's own cases unless role is `SUPERVISOR`, who sees
+  everything. This is the one piece of the confidentiality story that
+  actually limits blast radius, not just gates a login screen.
+- Login page matches the existing blue chrome (reuse `Card`/`Input`, not
+  a new design pass). Logout affordance next to the existing theme toggle.
+- Explicitly **not** doing: OAuth/SSO, password reset, email verification,
+  a full audit-log table (worth a roadmap line in the pitch, not worth
+  building — see `docs/PITCH.md`).
+
+**2. n8n + full timed dry-run (carried over from Day 4, unblocked once
+Docker is up).** Re-verify the live n8n canvas survived both the repaint
+and the new auth gate (n8n's webhook calls hit the ack routes directly,
+not through a browser — confirm the shared-secret guard doesn't break
+them), then run the full judge-facing path end to end with a clock on it,
+2-3 times with different addresses.
+
+**3. Small untested edges** (flagged during the Day 4 bug bash, not yet
+closed): double-clicking "Re-route" fast (race on `Case.status`), a valid
+address for the wrong chain selector, whitespace/casing on a pasted
+address.
+
+**4. Pitch rehearsal.** `docs/PITCH.md` is written as the deck source —
+do the actual lift (slides) and rehearse the differentiation-story
+narrative (item 3) and the n8n-as-visibility-layer framing.
+
+**5. Demo-day checklist** (not code): what to do if n8n's owner account
+needs recreating, a fallback recording of the n8n canvas executing in case
+live n8n flakes in front of judges.
+
+Everything else out-of-scope on day 1 (bridge correlation,
+`confirmedByVaspResponse`, real Sahyog integration) stays out of scope —
+auth was the one reversal, not a general re-opening of scope.

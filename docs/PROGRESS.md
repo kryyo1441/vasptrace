@@ -582,14 +582,31 @@ the cache directly in the browser tab.
 
 ## Next up
 
-All ten plan items have a first pass — nothing blocks an end-to-end demo
-(paste address → live trace → graph → n8n canvas → scoring/recommendation →
-PDF report → mock-route to VASP), which was the plan's stated definition of
-done for the week. Day 1 finished all of it; days 2-5 are hardening and
-demo-rehearsal, not new scope. See PLAN.md's
-["Day-by-day schedule"](./PLAN.md#day-by-day-schedule-added-end-of-day-1)
-section for the actual breakdown. Items worth repeating here since they're
-open risks:
+All ten original plan items have a first pass and the app is demo-ready
+end to end. Real submission deadline is **2 days out, ~4 working windows**
+— see `PLAN.md`'s "Final stretch" section (right after the old "Day 5 —
+Buffer + pitch" stub, which it supersedes) for the authoritative priority
+order. Summary, most urgent first:
+
+1. **Auth + RBAC — new scope, in progress.** Reversed the day-1
+   "single-user demo is fine" call after the user raised a real
+   confidentiality question: wallet addresses are already public on-chain
+   data (hashing them or writing them to a chain doesn't hide anything —
+   whoever wants to check a candidate address already has it, so an
+   unsalted-in-effect lookup is trivial either way; see the 2026-09-09
+   conversation if this needs re-explaining to someone else on the team),
+   but *this app associating an address with an active investigation* is
+   real, sensitive metadata, and today there's no login gating it at all.
+   Design (full detail in `PLAN.md`): hand-rolled session auth over
+   `next-auth` (avoids a beta dependency two days before submission) using
+   Node's stdlib `crypto.scrypt`/`timingSafeEqual` + an HMAC-signed cookie,
+   `middleware.ts` gating every route except `/login`, and RBAC via a new
+   `Case.createdById` so investigators see only their own cases and
+   supervisors see all. **Watch point going in**: `/api/n8n/*-ack` routes
+   are called by n8n itself, server-to-server, with no browser session — a
+   blanket auth gate over `/api/*` would break the n8n rehearsal that took
+   two days to get right last week. Those two routes need a shared-secret
+   header, not the session cookie.
 - **Day 4's visual overhaul is done** — blue repaint, search-engine `/`,
   stats dashboard `/cases`, graph prettiness (glow, curved/animated links,
   legend). See the 2026-09-09 Day 4 changelog entry for what changed and
@@ -599,11 +616,12 @@ open risks:
 - Item 1: no pagination on the Bitcoin/Tron fetchers (Blockstream caps at
   ~25 recent txs, Tronscan capped at 50) — fine for a demo trace, would
   matter for a real caseload.
-- Item 6: **closed.** The live n8n rehearsal ran on Day 3 — both workflows
-  imported, activated and confirmed executing on the canvas from a real trace
-  and a real Sahyog click, after fixing two bugs in the committed workflow
-  JSON that only a live run could have exposed (see the 2026-09-09 changelog
-  entry). Residual risk is now setup-shaped, not correctness-shaped: n8n asks
-  for an owner account on first boot, so if the `n8n_data` volume is ever
-  recreated on demo day someone has to re-create that account before the
-  webhooks work.
+- Item 6: **closed, but re-verify after auth lands.** The live n8n
+  rehearsal ran on Day 3 — both workflows imported, activated and confirmed
+  executing on the canvas from a real trace and a real Sahyog click, after
+  fixing two bugs in the committed workflow JSON that only a live run could
+  have exposed (see the 2026-09-09 changelog entry). Residual risk is now
+  setup-shaped, not correctness-shaped: n8n asks for an owner account on
+  first boot, so if the `n8n_data` volume is ever recreated on demo day
+  someone has to re-create that account before the webhooks work — plus
+  the new auth-gate watch point above.
