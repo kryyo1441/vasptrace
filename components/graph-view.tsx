@@ -232,9 +232,6 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
             const fontSize = Math.max(10 / globalScale, 3.4);
             ctx.font = `${node.kind === "SUSPECT" ? "600" : "400"} ${fontSize}px system-ui, sans-serif`;
             ctx.textAlign = "center";
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
-            ctx.fillStyle = "#1e293b";
             // The radial layout puts every depth-1 node level with the
             // suspect (angle 0/π when there are 2 siblings) — a below-node
             // label for the suspect then collides with its own immediate
@@ -242,10 +239,35 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
             // sidesteps the single most common case (small trace, few
             // depth-1 nodes); it's a placement heuristic, not full
             // collision avoidance across the whole graph.
-            const y = node.kind === "SUSPECT" ? node.y - r - 2 : node.y + r + 2;
-            ctx.textBaseline = node.kind === "SUSPECT" ? "bottom" : "top";
-            ctx.strokeText(label, node.x, y);
-            ctx.fillText(label, node.x, y);
+            const above = node.kind === "SUSPECT";
+            const y = above ? node.y - r - 2 : node.y + r + 2;
+
+            // Solid rounded chip behind the text, NOT ctx.strokeText.
+            // strokeText traces each glyph's own outline, so a halo thick
+            // enough to be readable spikes out at sharp letter corners and
+            // blobs together around the "…" in a shortened address — the
+            // ragged look in the reported bug. A measured rect is uniform
+            // by construction and cheaper to draw.
+            const padX = fontSize * 0.4;
+            const padY = fontSize * 0.25;
+            const textW = ctx.measureText(label).width;
+            const boxW = textW + padX * 2;
+            const boxH = fontSize + padY * 2;
+            const boxX = node.x - boxW / 2;
+            const boxY = above ? y - boxH : y;
+
+            ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+            ctx.beginPath();
+            if (typeof ctx.roundRect === "function") {
+              ctx.roundRect(boxX, boxY, boxW, boxH, Math.min(3, fontSize * 0.35));
+            } else {
+              ctx.rect(boxX, boxY, boxW, boxH);
+            }
+            ctx.fill();
+
+            ctx.fillStyle = "#1e293b";
+            ctx.textBaseline = "middle";
+            ctx.fillText(label, node.x, boxY + boxH / 2);
           }
         }}
         nodePointerAreaPaint={(n, color, ctx) => {
