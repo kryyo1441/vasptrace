@@ -12,7 +12,7 @@ history.
 | 2 | Labeled address DB | **Done** — real seed data (exchange hot wallets, Tornado Cash, OFAC SDN, one Tron exchange address). |
 | 3 | Legal-actionability scoring | **Done** — `lib/scoring.ts`, wired into the trace response, rendered on `/` and the case detail page. |
 | 4 | Confidence scoring (high/medium/low) | **Done** — `lib/clustering.ts`: medium = forwards ≥80% of value to a known exchange, low = fan-in from ≥3 senders that forwards onward. Excluded from VASP recommendation (only exact-match routes a disclosure request). |
-| 5 | Graph visualization | **Done** — force-directed graph, color coding, click → detail sheet, edge tooltips, per-chain unit formatting (ETH/BTC/TRX). |
+| 5 | Graph visualization | **Done** — force-directed graph, color coding, click → detail sheet, edge tooltips, per-chain unit formatting (ETH/BTC/TRX). Day 4: custom node paint (suspect glow, flag rings, on-canvas labels), curved links with directional particles, and a per-trace legend. |
 | 6 | n8n workflow visualization | **Done, rehearsed live** — `docker-compose.yml` + two workflows in `n8n/workflows/`, fire-and-forget notify (`lib/n8n.ts`) from the trace and Sahyog routes. n8n is optional and never blocks/fails either flow — verified live with an unreachable webhook URL. Both workflows also run for real against `n8nio/n8n:latest`: imported, activated, and confirmed on the canvas from a real trace and a real Sahyog click (Day 3 — fixed a dead `typeVersion: 1` IF node and a webhook `body`-unwrap bug found only by running it). |
 | 7 | Case dashboard | **Done** — every trace persists as a `Case` (`/api/trace`), listed at `/cases`, each row links to a detail page at `/cases/[id]`. |
 | 8 | PDF report | **Done** — `@react-pdf/renderer`, `app/api/cases/[id]/report/route.ts`, renders entirely from the persisted `Case.traceResult` (no re-trace). |
@@ -402,6 +402,113 @@ All ten `PLAN.md` items now have a status other than "not started."
   DevTools → Application → Service Workers before touching the code, or dodge
   the origin collision entirely with `npm run dev -- -p 3001`.
 
+### 2026-09-09 — Day 4: visual overhaul (blue repaint)
+
+Day 3's UI/UX polish (15 files — contrast tokens, mobile-overflow fix,
+FAN_OUT retune, n8n rehearsal, PDF letterhead) was committed first as its
+own commit so the repaint below lands on a clean base and stays a legible
+diff.
+
+- **Blue chrome, functional colour untouched.** `app/globals.css`'s
+  `:root`/`.dark` tokens moved from the Day 2 monochrome scheme to a blue
+  palette (`--primary` `#2563eb`-equivalent oklch, blue-tinted `--card`/
+  `--background`/`--muted`/`--accent`, a blue-tinted ambient body gradient
+  replacing the old grayscale one). `--risk-*` and the graph's
+  `NODE_COLOR`/`FLAG_COLOR` maps are deliberately outside this token set —
+  per PLAN.md's hard constraint, blue is chrome only.
+  - **Real collision caught before shipping:** `NODE_COLOR.BRIDGE` was
+    `#2563eb` — byte-identical to the new `--primary`. A BRIDGE node would
+    have silently read as "app chrome" instead of a distinct node kind.
+    Moved to teal (`#0d9488`).
+- **`/` rebuilt as a search-engine landing page** — centered mark, single
+  large address input with an inline search icon, chain/depth demoted to
+  small secondary controls, Enter-to-submit. Empty state reads as a search
+  landing page; a trace result renders below it as a results page, with no
+  separate header duplicating the hero.
+- **`/cases` rebuilt as a stats dashboard** — all from existing `Case` rows,
+  no schema change: 4 stat tiles (cases traced, disclosure requests routed,
+  high/critical risk, chains covered), risk-level distribution and
+  cases-per-chain bar rows, most-recommended-VASPs and most-common-typology-
+  flag rankings, and a 14-day cases-per-day sparkline (inline SVG, no
+  charting dependency). The existing table gained a real zero state and now
+  resolves `recommendedVaspId` to a VASP name via one extra
+  `vaspRegistry.findMany()` instead of rendering a raw cuid.
+  `ponytail:` note left on the typology-flag tally: it parses `typologyFlags`
+  JSON per row (O(all cases) on every load) — fine at demo volume (81 rows
+  today), would need a denormalized count if that changes.
+- **Graph prettiness** (`components/graph-view.tsx`): replaced the default
+  circle rendering with a `nodeCanvasObject` — radial glow on the suspect
+  root, a colored ring on typology-flagged nodes, on-canvas entity labels
+  (skipped below `globalScale 1.1` to avoid clutter when zoomed out), plus
+  `linkCurvature`, `linkDirectionalParticles` animating flow direction, and
+  a legend (bottom-left, only lists node kinds actually present in that
+  trace). `nodePointerAreaPaint` added alongside the custom paint so node
+  clicks still hit the same radius the paint draws — verified live
+  (Puppeteer click on the suspect node's screen position → detail Sheet
+  opened, confirmed via `document.body.innerText`). `nodeVal` kept
+  alongside the custom paint: it drives the force simulation's collision
+  sizing, which the paint callback doesn't touch.
+  - **Real bug caught and fixed during verification, not just imagined:**
+    the radial layout puts every depth-1 sibling level with the suspect
+    when there are exactly 2 of them (angle 0 and π), so the suspect's own
+    below-node label collided with its immediate neighbor's label on small
+    traces — the single most common shape for a demo trace. Fixed by
+    drawing the suspect's label *above* the node instead of below; a
+    placement heuristic for the common case, not full collision avoidance
+    across an arbitrary graph.
+- **PDF letterhead re-synced**: `lib/pdf/report.tsx`'s brand mark and
+  header rule were literal `#1a1a1a` mirroring the old near-black
+  `--primary` — moved to a `BRAND = "#2563eb"` constant so the downloaded
+  report still visually matches the app. `RISK_COLOR_PRINT` is the
+  *other* literal map in that file (kept in sync with `--risk-*`
+  independently — see below).
+- **Contrast re-verified for real, not re-reasoned about.** First pass
+  assumed the new (lighter) `--background` alone was enough and left
+  `--risk-*` unchanged from Day 3 — wrong: the repaint's blue ambient
+  gradients live on `body`'s `background-image`, not `--background`, and
+  darken the page ground more where a badge sits directly on it (e.g. the
+  case-detail header, no `Card` wrapper) than under a `Card`'s translucent
+  white surface. Pixel-sampled both real composited surfaces (headless
+  Chromium screenshot + ImageMagick, not inference): card ≈ `#FAFEFF`,
+  page-direct near the header ≈ `#E9F1FD`. At Day 3's values, `LOW`
+  (4.41:1) and `MEDIUM` (4.33:1) both failed 4.5:1 against page-direct —
+  a real regression the repaint introduced. Moved `--risk-low` to
+  Tailwind green-800 (`#166534`, 6.27:1 page-direct / 7.02:1 card) and
+  `--risk-medium` to amber-800 (`#854d0e`, 6.02:1 / 6.75:1) — real margin,
+  not just clearing the line. `HIGH`/`CRITICAL` already had headroom and
+  are unchanged. `RISK_COLOR_PRINT` in `lib/pdf/report.tsx` updated to
+  match. Also checked (already passing, untouched): the Sahyog "Simulated
+  integration" badge (`amber-700`, 4.95:1 on its card surface) and the
+  trace-warnings banner (`amber-700` on its own tinted background, 4.63:1).
+- **Verification, measured not eyeballed:** 375px `scrollWidth` probe (via
+  a `puppeteer-core` install found in a sibling project, since this repo
+  has none) on `/`, `/cases`, `/cases/[id]` — all three equal `375`, zero
+  overflow, including the new stat-tile grid (exactly the wide-content
+  shape that caused Day 3's bug). A real depth-2 live trace driven through
+  the actual form (not the API directly) end to end, confirming the
+  loading spinner, the "no VASP reached" empty state, the typology-flag
+  badge, and the n8n-unreachable warning banner all render correctly
+  against the new palette. Zero browser console errors across all three
+  pages. The degenerate 1-node graph (a never-transacted address) renders
+  without a `zoomToFit` blowup and shows a legend with only "Suspect". Malformed
+  addresses for all three chains (ETH/BTC/TRON) and `maxDepth: 10` all
+  degrade to a clear error or complete cleanly (~11s), not a blank page or
+  crash. All three self-checks (`typology`, `clustering`, `scoring`) and
+  `tsc --noEmit`/`eslint` still pass. Test cases created during
+  verification were deleted afterward — the DB is back to 81 real cases.
+- **Not done, explicitly out of this pass:**
+  - **n8n canvas execution during a live run** — Docker is down again on
+    this machine (`nf_tables` kernel module missing for the currently
+    running kernel, same root cause as Day 3's entry; modules exist on disk
+    for `6.18.50-2-lts`, running kernel is `6.18.50-1-lts`). Needs another
+    reboot, which is the user's call, not something to trigger mid-session.
+    Everything else about item 6 is already verified (Day 3) and unaffected
+    by the repaint.
+  - **The timed, judge-facing full dry-run** (paste address → live trace →
+    graph → n8n canvas → scoring → PDF → mock-route, with a clock on it) —
+    a live rehearsal exercise, better run by a person than simulated here.
+    The individual pieces it exercises were each verified above.
+
 ## Next up
 
 All ten plan items have a first pass — nothing blocks an end-to-end demo
@@ -412,23 +519,12 @@ demo-rehearsal, not new scope. See PLAN.md's
 ["Day-by-day schedule"](./PLAN.md#day-by-day-schedule-added-end-of-day-1)
 section for the actual breakdown. Items worth repeating here since they're
 open risks:
-- **Day 4 gained new scope (requested end of Day 3): a full visual overhaul.**
-  The Day 2 monochrome direction shipped but reads as too plain — Day 4 now
-  repaints the app around a blue palette, rebuilds `/` as a search-engine-style
-  landing page, and turns `/cases` into a stats dashboard. Full spec in
-  PLAN.md's Day 4 section. Three things worth knowing before starting:
-  - The "graph doesn't fit on screen after a trace" complaint is a **bug with
-    a known cause**, not a missing feature: `<ForceGraph2D>` in
-    `components/graph-view.tsx` is passed `height` but no `width`, so it
-    defaults to window width and lays the canvas out wider than its
-    container — the existing `zoomToFit` call is fitting to a canvas whose
-    edges are clipped. Fixing it is small; it does not need the redesign.
-  - Functional colour (risk badges, graph node-kind colours) must survive the
-    repaint intact — it encodes meaning. Only chrome goes blue.
-  - The repaint invalidates Day 3's contrast work: the `--risk-*` token pairs
-    were tuned to hit 4.5:1 against the *current* backgrounds, and
-    `lib/pdf/report.tsx` carries a duplicate literal hex map that has to move
-    with them. Re-verify both rather than assuming they still hold.
+- **Day 4's visual overhaul is done** — blue repaint, search-engine `/`,
+  stats dashboard `/cases`, graph prettiness (glow, curved/animated links,
+  legend). See the 2026-09-09 Day 4 changelog entry for what changed and
+  what was verified. Still open from the original Day 4 scope: the timed
+  judge-facing dry-run and n8n canvas execution (blocked on a Docker-
+  affecting kernel/module mismatch — needs a reboot, the user's call).
 - Item 1: no pagination on the Bitcoin/Tron fetchers (Blockstream caps at
   ~25 recent txs, Tronscan capped at 50) — fine for a demo trace, would
   matter for a real caseload.

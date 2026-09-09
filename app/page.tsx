@@ -17,7 +17,7 @@ import { GraphView } from "@/components/graph-view";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
 import { vaspLine } from "@/lib/format";
 import type { TraceGraph, TypologyFlag } from "@/lib/tracers/types";
-import { AlertTriangle, ArrowRight, Loader2, Network, Shield, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2, Network, Search, Shield, Wallet } from "lucide-react";
 
 const ADDRESS_PLACEHOLDER: Record<string, string> = {
   ETHEREUM: "0x… wallet address",
@@ -37,6 +37,7 @@ export default function Home() {
   const typologyFlags: TypologyFlag[] = graph
     ? Array.from(new Set(graph.nodes.flatMap((n) => n.typologyFlags)))
     : [];
+  const hasResult = loading || graph !== null;
 
   async function runTrace() {
     setLoading(true);
@@ -61,18 +62,7 @@ export default function Home() {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Shield className="size-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">VASPtrace</h1>
-            <p className="text-sm text-muted-foreground">
-              Multi-chain wallet tracer — live on Ethereum, Bitcoin, and Tron.
-            </p>
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-4">
         <Link
           href="/cases"
           className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground underline-offset-4 hover:underline"
@@ -82,51 +72,77 @@ export default function Home() {
         </Link>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Wallet className="size-4 text-muted-foreground" />
-            New trace
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-4 sm:flex-row">
+      {/* Search-engine landing hero: centered mark, one dominant input, the
+          rest of the app (results, empty state) lives below it — reads as a
+          search landing page until a trace runs, then as a results page. */}
+      <div
+        className={
+          hasResult
+            ? "flex flex-col items-center gap-5 pt-2 pb-2"
+            : "flex flex-col items-center gap-6 pt-16 pb-6 sm:pt-24"
+        }
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25">
+            <Shield className="size-7" aria-hidden="true" />
+          </div>
+        </div>
+        <div className="text-center">
+          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">VASPtrace</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Trace a suspect wallet to the nearest legally-actionable exchange — live on Ethereum, Bitcoin, and Tron.
+          </p>
+        </div>
+
+        <Card className="w-full max-w-2xl">
+          <CardContent className="flex flex-col gap-3 pt-1">
             <div className="relative w-full">
-              <Wallet className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Search className="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input
                 aria-label="Wallet address"
                 placeholder={ADDRESS_PLACEHOLDER[chain]}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                className="pl-8 font-mono"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && address && !loading) runTrace();
+                }}
+                className="h-14 rounded-xl pr-4 pl-11 font-mono text-base shadow-sm"
               />
             </div>
-            <Select value={chain} onValueChange={(v) => v && setChain(v)}>
-              <SelectTrigger aria-label="Blockchain" className="w-full sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ETHEREUM">Ethereum</SelectItem>
-                <SelectItem value="BITCOIN">Bitcoin</SelectItem>
-                <SelectItem value="TRON">Tron</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              aria-label="Max trace depth"
-              type="number"
-              min={1}
-              max={10}
-              value={maxDepth}
-              onChange={(e) => setMaxDepth(Number(e.target.value))}
-              className="w-full sm:w-24"
-            />
-          </div>
-          <Button onClick={runTrace} disabled={!address || loading} className="w-fit">
-            {loading ? "Tracing…" : "Run trace"}
-          </Button>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-        </CardContent>
-      </Card>
+            <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <Select value={chain} onValueChange={(v) => v && setChain(v)}>
+                  <SelectTrigger aria-label="Blockchain" size="sm" className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ETHEREUM">Ethereum</SelectItem>
+                    <SelectItem value="BITCOIN">Bitcoin</SelectItem>
+                    <SelectItem value="TRON">Tron</SelectItem>
+                  </SelectContent>
+                </Select>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  Max depth
+                  <Input
+                    aria-label="Max trace depth"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={maxDepth}
+                    onChange={(e) => setMaxDepth(Number(e.target.value))}
+                    className="h-8 w-16"
+                  />
+                </label>
+              </div>
+              <Button onClick={runTrace} disabled={!address || loading} size="lg" className="gap-2">
+                {loading ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Wallet className="size-4" aria-hidden="true" />}
+                {loading ? "Tracing…" : "Run trace"}
+              </Button>
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </CardContent>
+        </Card>
+      </div>
 
       {loading && (
         <Card>
@@ -139,7 +155,7 @@ export default function Home() {
 
       {graph && (
         <Card>
-          <CardHeader className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <CardHeader>
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Network className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -148,19 +164,12 @@ export default function Home() {
               {caseId && (
                 <Link
                   href={`/cases/${caseId}`}
-                  className="inline-flex items-center gap-1 text-xs text-foreground underline-offset-4 hover:underline"
+                  className="mt-1 inline-flex items-center gap-1 text-xs text-foreground underline-offset-4 hover:underline"
                 >
                   Open case, generate report, route disclosure request
                   <ArrowRight className="size-3" />
                 </Link>
               )}
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline" style={{ borderColor: "#dc2626", color: "#dc2626" }}>Suspect</Badge>
-              <Badge variant="outline" style={{ borderColor: "#6b7280", color: "#6b7280" }}>Intermediary</Badge>
-              <Badge variant="outline" style={{ borderColor: "#16a34a", color: "#16a34a" }}>Exchange</Badge>
-              <Badge variant="outline" style={{ borderColor: "#ea580c", color: "#ea580c" }}>Mixer</Badge>
-              <Badge variant="outline" style={{ borderColor: "#7f1d1d", color: "#7f1d1d" }}>Darknet/Ransomware</Badge>
             </div>
           </CardHeader>
           <CardContent>

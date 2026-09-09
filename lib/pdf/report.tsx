@@ -11,17 +11,23 @@ import type { TraceGraph } from "@/lib/tracers/types";
 // theme-aware) web UI. Keep this in sync with app/globals.css's :root
 // (light-mode) --risk-* values if those ever change.
 const RISK_COLOR_PRINT: Record<RiskLevel, string> = {
-  LOW: "#15803d",
-  MEDIUM: "#a16207",
+  LOW: "#166534",
+  MEDIUM: "#854d0e",
   HIGH: "#c2410c",
   CRITICAL: "#b91c1c",
 };
 
+// Day 4 repaint moved the app's --primary from near-black to blue
+// (#2563eb) — the letterhead mark/header rule mirror bg-primary (see the
+// Day 3 PROGRESS entry), so they move too. Body text stays near-black:
+// legibility for a printed legal document, not brand chrome.
+const BRAND = "#2563eb";
+
 const styles = StyleSheet.create({
   page: { padding: 36, fontSize: 10, fontFamily: "Helvetica", color: "#1a1a1a" },
-  header: { flexDirection: "row", justifyContent: "space-between", borderBottom: "2 solid #1a1a1a", paddingBottom: 8, marginBottom: 16 },
+  header: { flexDirection: "row", justifyContent: "space-between", borderBottom: `2 solid ${BRAND}`, paddingBottom: 8, marginBottom: 16 },
   brandRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  mark: { width: 22, height: 22, backgroundColor: "#1a1a1a", borderRadius: 5, alignItems: "center", justifyContent: "center" },
+  mark: { width: 22, height: 22, backgroundColor: BRAND, borderRadius: 5, alignItems: "center", justifyContent: "center" },
   markText: { color: "#fff", fontFamily: "Helvetica-Bold", fontSize: 12 },
   title: { fontSize: 16, fontFamily: "Helvetica-Bold" },
   subtitle: { fontSize: 9, color: "#555", marginTop: 2 },

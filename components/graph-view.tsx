@@ -18,6 +18,12 @@ import { AlertTriangle, ShieldCheck } from "lucide-react";
 // react-force-graph-2d touches window/canvas at import time — must load client-only.
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
 
+// Functional color — deliberately outside the blue chrome palette in
+// globals.css (PLAN.md Day 4: "blue is for chrome," node kind is meaning).
+// BRIDGE was #2563eb before the Day 4 repaint, which is now byte-identical
+// to --primary; a BRIDGE node would have silently read as "app chrome"
+// instead of a node kind. Moved to teal so every kind stays visually
+// distinct from the new blue UI.
 const NODE_COLOR: Record<TraceNode["kind"], string> = {
   SUSPECT: "#dc2626", // red
   INTERMEDIARY: "#6b7280", // muted gray
@@ -25,8 +31,19 @@ const NODE_COLOR: Record<TraceNode["kind"], string> = {
   MIXER: "#ea580c", // orange
   DARKNET: "#7f1d1d", // dark red
   RANSOMWARE: "#7f1d1d", // dark red
-  BRIDGE: "#2563eb", // blue
+  BRIDGE: "#0d9488", // teal — was #2563eb, collided with the new --primary
   UNKNOWN: "#6b7280",
+};
+
+const NODE_KIND_LABEL: Record<TraceNode["kind"], string> = {
+  SUSPECT: "Suspect",
+  INTERMEDIARY: "Intermediary",
+  EXCHANGE: "Exchange",
+  MIXER: "Mixer",
+  DARKNET: "Darknet",
+  RANSOMWARE: "Ransomware",
+  BRIDGE: "Bridge",
+  UNKNOWN: "Unknown",
 };
 
 // Distinct from NODE_COLOR so a flagged edge reads as its own signal even
@@ -129,6 +146,32 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
     if (width > 0) fgRef.current?.zoomToFit(400, 60);
   }, [width, graphData]);
 
+  // Kinds actually present in this trace, in a fixed display order — a
+  // legend entry for a kind the graph never produced (e.g. RANSOMWARE on a
+  // clean trace) is noise, not a legend.
+  const presentKinds = useMemo(() => {
+    const order: TraceNode["kind"][] = [
+      "SUSPECT",
+      "EXCHANGE",
+      "INTERMEDIARY",
+      "MIXER",
+      "BRIDGE",
+      "DARKNET",
+      "RANSOMWARE",
+      "UNKNOWN",
+    ];
+    const seen = new Set(graph.nodes.map((n) => n.kind));
+    return order.filter((k) => seen.has(k));
+  }, [graph.nodes]);
+
+  // Pixel radius for a node — shared between the paint callback and the
+  // pointer hit-area so clicks land exactly where the circle is drawn.
+  function nodeRadius(node: GraphNode) {
+    if (node.kind === "SUSPECT") return 9;
+    if (node.typologyFlags.length > 0) return 7;
+    return 5.5;
+  }
+
   return (
     <div
       ref={containerRef}
@@ -146,8 +189,76 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
             ? `${base} — ${node.typologyFlags.map((f) => TYPOLOGY_LABEL[f]).join(", ")}`
             : base;
         }}
-        nodeColor={(n) => NODE_COLOR[(n as GraphNode).kind]}
-        nodeRelSize={7}
+        nodeCanvasObject={(n, ctx, globalScale) => {
+          const node = n as GraphNode;
+          const r = nodeRadius(node);
+          const color = NODE_COLOR[node.kind];
+
+          // Glow/halo on the suspect root — the one node every trace has,
+          // and the thing a judge's eye should find first on the canvas.
+          if (node.kind === "SUSPECT") {
+            const glow = ctx.createRadialGradient(node.x, node.y, r * 0.5, node.x, node.y, r * 3.2);
+            glow.addColorStop(0, "rgba(220, 38, 38, 0.35)");
+            glow.addColorStop(1, "rgba(220, 38, 38, 0)");
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, r * 3.2, 0, 2 * Math.PI);
+            ctx.fill();
+          }
+
+          // A thin ring in the flag color reads as "this node was flagged"
+          // even before hover, distinct from the fill (which is node kind).
+          if (node.typologyFlags.length > 0) {
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, r + 2.5, 0, 2 * Math.PI);
+            ctx.strokeStyle = FLAG_COLOR[node.typologyFlags[0]];
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+          ctx.stroke();
+
+          // On-canvas label — text drawn directly rather than hover-only,
+          // so the trail reads at a glance on a projector. Skip while
+          // heavily zoomed out (labels would overlap/blur into noise).
+          if (globalScale > 1.1) {
+            const label = node.entityName ?? short(node.address);
+            const fontSize = Math.max(10 / globalScale, 3.4);
+            ctx.font = `${node.kind === "SUSPECT" ? "600" : "400"} ${fontSize}px system-ui, sans-serif`;
+            ctx.textAlign = "center";
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+            ctx.fillStyle = "#1e293b";
+            // The radial layout puts every depth-1 node level with the
+            // suspect (angle 0/π when there are 2 siblings) — a below-node
+            // label for the suspect then collides with its own immediate
+            // neighbor's label. Drawing the suspect's label above instead
+            // sidesteps the single most common case (small trace, few
+            // depth-1 nodes); it's a placement heuristic, not full
+            // collision avoidance across the whole graph.
+            const y = node.kind === "SUSPECT" ? node.y - r - 2 : node.y + r + 2;
+            ctx.textBaseline = node.kind === "SUSPECT" ? "bottom" : "top";
+            ctx.strokeText(label, node.x, y);
+            ctx.fillText(label, node.x, y);
+          }
+        }}
+        nodePointerAreaPaint={(n, color, ctx) => {
+          const node = n as GraphNode;
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, nodeRadius(node) + 2, 0, 2 * Math.PI);
+          ctx.fill();
+        }}
+        // nodeCanvasObject above only replaces the paint step — the force
+        // simulation still reads nodeVal for collision size, so a bigger
+        // suspect/flagged node keeps repelling neighbors more than it would
+        // as an unweighted point mass.
         nodeVal={(n) => {
           const node = n as GraphNode;
           if (node.kind === "SUSPECT") return 3;
@@ -159,12 +270,27 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
           const flags = (l as unknown as GraphLink).flags;
           return flags.length > 0 ? FLAG_COLOR[flags[0]] : "#9ca3af";
         }}
+        linkCurvature={0.2}
         linkDirectionalArrowLength={5}
         linkDirectionalArrowRelPos={1}
+        linkDirectionalParticles={(l) => ((l as unknown as GraphLink).flags.length > 0 ? 3 : 2)}
+        linkDirectionalParticleWidth={2}
+        linkDirectionalParticleSpeed={0.004}
         onNodeClick={(n) => setSelected(n as GraphNode)}
         onEngineStop={() => fgRef.current?.zoomToFit(400, 60)}
         height={500}
       />
+
+      {/* Legend — the color coding was undiscoverable without hovering a
+          node/link. Only lists kinds this specific trace actually has. */}
+      <div className="pointer-events-none absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-x-3 gap-y-1.5 rounded-lg border border-border bg-background/85 px-3 py-2 text-xs backdrop-blur-xl">
+        {presentKinds.map((k) => (
+          <span key={k} className="inline-flex items-center gap-1.5">
+            <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: NODE_COLOR[k] }} />
+            {NODE_KIND_LABEL[k]}
+          </span>
+        ))}
+      </div>
 
       <Sheet open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
         <SheetContent>
