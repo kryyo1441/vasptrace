@@ -6,15 +6,57 @@ Built for Smart India Hackathon problem statement 26182 (MHA / I4C). See
 
 ## Stack
 
-- **Frontend/backend**: Next.js App Router, single repo — pages and API
+- **Frontend/backend**: Next.js 16 App Router, single repo — pages and API
   routes together, no separate backend service (`app/api/*/route.ts`).
 - **Database**: SQLite via Prisma ORM (`prisma/schema.prisma`), easy to seed
   and inspect locally.
-- **Graph visualization**: `react-force-graph-2d` inside a shadcn Card.
+- **Auth**: hand-rolled session auth (`lib/auth.ts`) — Node stdlib only,
+  `crypto.scrypt` for password hashing and an HMAC-signed cookie for the
+  session. See below for why not `next-auth`.
+- **Graph visualization**: `react-force-graph-2d` inside a shadcn Card,
+  custom-painted nodes (`nodeCanvasObject`).
+- **Charts**: `recharts` via shadcn's chart components — the case dashboard's
+  distribution bars and 14-day trend area chart.
+- **Theming**: `next-themes`, real light/dark mode keyed off the `--*` token
+  pairs in `app/globals.css`.
 - **PDF reports**: `@react-pdf/renderer`, rendered server-side in a route
   handler.
 - **Workflow visualization**: self-hosted n8n via Docker Compose — see
   below.
+
+## Auth and access control
+
+Added late (day 1 explicitly scoped it out as "single-user demo is fine";
+reversed once it was clear the app was one URL away from exposing which
+addresses are under active investigation). The design question that matters
+isn't the login screen, it's what a session actually authorizes:
+
+- **`proxy.ts`, not `middleware.ts`** — Next.js 16 deprecated and renamed
+  the file convention; the old name silently does nothing. It gates every
+  route except `/login`, `/api/auth/*`, and the n8n ack endpoints, and does
+  a signature-only session check (no DB round trip).
+- **Every protected route re-checks itself** via `getCurrentUser()` rather
+  than trusting the proxy matcher. This follows Next's own guidance: a
+  matcher misconfiguration, or a route added outside its coverage, should
+  never be the only thing between a request and case data.
+- **Object-level authorization, not just a login gate.** `canAccessCase()`
+  is applied in the case detail page, the PDF report route, and the Sahyog
+  routing route — so one investigator can't read another's case by guessing
+  a case id. The `/cases` list is filtered in the query itself. Supervisors
+  bypass both. Denials return 404, not 403, so the response doesn't confirm
+  that someone else's case exists.
+- **Why not `next-auth`**: it's still v5 beta, and brings
+  provider/adapter/callback surface this app doesn't use — there's exactly
+  one credentials flow. Node's stdlib covers it in less code with less
+  dependency risk.
+- **The n8n ack endpoints are deliberately unauthenticated.** They're called
+  by n8n itself, server-to-server, with no browser session; they only log
+  receipt and return nothing sensitive. Gating them would have broken the
+  workflow integration for no real security gain.
+
+Known limitation, stated plainly: there's no audit log, no password reset,
+and no SSO. For a real deployment those matter, along with encryption at
+rest for the SQLite file. See the roadmap in [`PITCH.md`](./PITCH.md).
 
 ## What's live vs. simulated
 
@@ -29,6 +71,7 @@ heuristic/simulation. At a glance:
 | Legal-actionability scoring | **Live** — real arithmetic over the seeded registry, not a black box |
 | Confidence clustering (medium/low tiers) | **Live** — real graph-structural heuristics, not AI/ML (`lib/clustering.ts`) |
 | Typology flags | **Live** — real rule-based pattern detection over the traced graph (`lib/typology.ts`) |
+| Auth + RBAC | **Live** — real password hashing, real signed sessions, real per-user case scoping enforced server-side. Demo *accounts* are seeded; the mechanism isn't mocked |
 | PDF report | **Live** — generated from the actual persisted trace, no placeholder data |
 | n8n pipeline visualization | **Real workflow, illustrative re-check** — the canvas actually executes on real trace data, but the "check against labeled DB" step it shows is a visual mirror of a check Next.js already performed, not a second live lookup |
 | Sahyog routing | **Simulated** — no real Sahyog API is publicly available; the JSON payload shown is what *would* be sent, and it's never transmitted anywhere outside the local system |

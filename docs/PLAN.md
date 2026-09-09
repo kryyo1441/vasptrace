@@ -119,6 +119,11 @@ document which parts are "live/real" vs "simulated for demo purposes."
 - Real self-learning feedback loop — just add unused `confirmedByVaspResponse`
   field to Case model for now
 - Auth/multi-tenancy — single-user demo is fine
+  — **REVERSED 2026-09-09, and built.** See the "Final stretch" section
+  below for why (the sensitive fact isn't the wallet address, it's this
+  system linking it to an active investigation) and `PROGRESS.md`'s "Auth"
+  changelog entry for what shipped. Multi-tenancy in the full sense is
+  still out of scope; per-user case scoping is not.
 - Real Sahyog API integration
 
 ## Deliverables

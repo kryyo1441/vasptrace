@@ -18,9 +18,11 @@ history.
 | 8 | PDF report | **Done** — `@react-pdf/renderer`, `app/api/cases/[id]/report/route.ts`, renders entirely from the persisted `Case.traceResult` (no re-trace). |
 | 9 | Mocked Sahyog routing | **Done** — `app/api/cases/[id]/sahyog/route.ts` + `SahyogButton`, flips `Case.status` to `ROUTED`, shows the simulated payload inline with a "Simulated integration" badge. |
 | 10 | Typology/pattern flags | **Done** — `lib/typology.ts`, flags rendered directly on graph edges/nodes plus a summary badge row. |
+| — | Auth + RBAC | **Done (added scope, 2026-09-09)** — not one of the ten original items; day 1 scoped it out as "single-user demo is fine" and that was reversed. Login gate (`proxy.ts` + `lib/auth.ts`), per-investigator case scoping, object-level authorization on case detail / PDF / Sahyog. See the 2026-09-09 "Auth" changelog entry. |
 
-Out-of-scope items (bridge correlation placeholder, `confirmedByVaspResponse`,
-auth) are all still correctly out of scope — no action needed there yet.
+Remaining out-of-scope items (bridge correlation placeholder,
+`confirmedByVaspResponse`) are still correctly out of scope — no action
+needed there yet. Auth *was* on that list and is no longer: see above.
 
 ## Changelog
 

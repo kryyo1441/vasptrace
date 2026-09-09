@@ -32,6 +32,22 @@ pays the Binance cold wallet — it's an extremely high-frequency sweeper
 (dozens of txs/hour) whose send to Binance is already pushed off its own
 25-tx Blockstream window; not usable as a root.
 
+### From the suspicious-wallet dataset (added 2026-09-09)
+
+`btc_wallets_data.csv` at the repo root (~8.5k suspicious BTC wallets) was
+profiled and sample-traced; the full findings are in
+[`HANDOFF.md`](./HANDOFF.md). The one address worth adding to a demo:
+
+| Address | Hits | Notes |
+|---|---|---|
+| `3FrmCRcGKiTATfreBDM9F17yAUDoDsnWeA` | Binance (cold wallet) @ hop 4 | needs **maxDepth 5**, unlike everything above. 60 nodes, HIGH risk, FAN_OUT + PEEL_CHAIN — the best "messy real laundering trail" visual we have, vs. the clean 1-hop addresses above |
+
+Two caveats before relying on it: it is **not** pre-verified to the same
+standard as the table above (it was traced once, not re-checked for drift),
+and at depth 5 it hits the 60-node budget cap, so the trail is truncated.
+The 1-hop addresses above remain the safe headline picks; this one is for
+showing what a *realistic* multi-hop trace looks like.
+
 ## Tron (Tronscan)
 
 | Address | Hits | Confidence chain |

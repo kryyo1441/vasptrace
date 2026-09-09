@@ -43,7 +43,7 @@ Built solo in 5 days for Smart India Hackathon, problem statement 26182
 
 ---
 
-## 2. What we built — five things, one differentiator
+## 2. What we built — six things, one differentiator
 
 1. **Live multi-chain tracer** — Ethereum, Bitcoin, Tron. Real public APIs,
    not synthetic data. Hop-by-hop, depth-limited, stops at a labeled
@@ -65,6 +65,13 @@ Built solo in 5 days for Smart India Hackathon, problem statement 26182
    flow that shows exactly what payload would be sent to I4C's Sahyog
    platform (real integration isn't publicly available yet — clearly
    labeled simulated, never pretended otherwise).
+6. **Authentication and role-based access** — because the sensitive thing
+   here isn't the wallet address (that's public on-chain data anyone can
+   read), it's *this system associating that address with an active I4C
+   investigation*. Investigators see only their own cases; supervisors see
+   all. Enforced server-side per case, not just hidden in the UI — one
+   investigator cannot open another's case, PDF report, or disclosure
+   routing even with a direct link.
 
 **The one to lead with in the pitch: #2.** It's the thing a generic
 blockchain-intelligence tool doesn't have, because it's specific to how
@@ -118,6 +125,7 @@ flowchart TB
 | Charts | recharts (via shadcn's chart components) | real bar/area charts on the case dashboard, not hand-rolled SVG |
 | Graph visualization | react-force-graph-2d | force-directed, custom-painted nodes (glow, flag rings, on-canvas labels), curved animated links |
 | Database | SQLite via Prisma ORM | zero-ops, trivially inspectable/seedable for a demo |
+| Auth | hand-rolled sessions (Node stdlib `scrypt` + HMAC cookie) | one credentials flow doesn't need next-auth's provider/adapter framework, and v5 is still beta — see §10 |
 | PDF generation | @react-pdf/renderer | stays in the JS/TS ecosystem, no Python microservice |
 | Workflow visualization | n8n (self-hosted, Docker) | the one piece that's genuinely optional — see §9 |
 | Theming | next-themes | real light/dark mode, system-aware |
@@ -137,6 +145,7 @@ project convention, enforced from day one.
 | Legal-actionability scoring | **Live** — real arithmetic over the seeded registry, score breakdown shown on screen, not a black box |
 | Confidence clustering | **Live** — real graph-structural heuristics (forward-ratio, fan-in), not AI/ML |
 | Typology flags | **Live** — real rule-based pattern detection over the traced graph |
+| Auth + role-based access | **Live** — real password hashing (scrypt), real signed sessions, real per-case authorization enforced server-side. The demo *accounts* are seeded; the mechanism is not mocked |
 | PDF report | **Live** — generated from the actual persisted trace |
 | n8n pipeline visualization | **Real workflow**, illustrative re-check — the canvas genuinely executes on real trace data; the "check against labeled DB" node it shows is a visual mirror of a check Next.js already performed, not a second live lookup |
 | Sahyog routing | **Simulated** — no public Sahyog API exists yet; the payload shown is exactly what would be sent, and it never leaves localhost |
@@ -328,6 +337,23 @@ not just that it works.
   dropped below WCAG AA contrast. Same discipline applied again when dark
   mode went from "tokens exist but nothing can reach them" to actually
   reachable for the first time — measured, not assumed, before shipping.
+- **We talked ourselves out of a bad security idea, then built the right
+  one.** The initial instinct was to protect wallet addresses by hashing
+  them, or writing them to a private chain. Both are security theater here:
+  a wallet address isn't a secret — it's public, on-chain, and anyone
+  checking whether a *specific* address is in the database already has the
+  plaintext to hash and compare. The real exposure was different and
+  simpler: the app had no login, so anyone who could reach the URL could
+  see which addresses an I4C investigation was looking at. That's the
+  sensitive fact, not the address. So we built auth and per-case
+  authorization instead — and deliberately did *not* build the thing that
+  would have looked more impressive in a diagram.
+- **A deprecated file convention that fails silently.** The auth gate
+  belongs in `middleware.ts` in every tutorial written before Next.js 16 —
+  which renamed it to `proxy.ts`. The old filename doesn't error, doesn't
+  warn, and doesn't run: an auth gate written that way would have looked
+  correct in code review and protected nothing. Caught by reading the
+  version's own docs before writing the file rather than after.
 
 ---
 
@@ -340,7 +366,8 @@ not just that it works.
 - **81 real cases** traced during development and demo rehearsal — not a
   handful of cherry-picked screenshots
 - **10/10** original plan items shipped with a working first pass by day 1,
-  hardened through day 4
+  hardened through day 4 — plus auth and RBAC, added after the fact when a
+  security review of our own design said it was needed (see §10)
 - **Zero** synthetic/mocked blockchain data anywhere in the live paths —
   every trace is a real API call
 
@@ -359,10 +386,11 @@ rather than vague hand-waving:
 - **ML-assisted typology detection** as a second opinion alongside the
   current rule-based heuristics, kept explicitly separate and labeled so
   the transparency story doesn't regress.
-- **Multi-investigator case collaboration** — shared case notes, an audit
-  trail of who routed what disclosure request when.
-- **Auth + role-based access**, needed for any real multi-user LEA
-  deployment.
+- **Multi-investigator case collaboration** — shared case notes, and an
+  audit log of who viewed or routed what. Auth and role-based access are
+  already built (§2, §4); the audit trail on top of them is the next step.
+- **Encryption at rest** for the case database, plus SSO instead of local
+  credentials — both needed before any real multi-tenant LEA deployment.
 - **Live OFAC/sanctions-list sync** for the labeled-address DB instead of a
   point-in-time seed.
 
