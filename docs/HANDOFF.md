@@ -17,12 +17,35 @@ verified live. Demo accounts: `investigator` / `vasptrace-investigator-2026`,
 `supervisor` / `vasptrace-supervisor-2026` (also in `README.md`). All 81
 pre-auth cases were backfilled to the investigator account.
 
+**Don't "clean up" the case count.** The DB is at **82** cases: the 81
+backfilled ones plus one the *user* traced themselves
+(`bc1qydntupzckl7m09a5mvaqsh5wvhexkt0rrsfjth`, the first address in the
+Bitcoin dataset below — 54 nodes, HIGH risk, both typology flags). It looks
+like leftover test pollution and is not. Verify who created a case before
+deleting anything; test cases created during a session should be deleted at
+the end of that session, but this one is the user's own work.
+
 **Startup**: `npm run dev`, then log in at `localhost:3000/login`. Docker is
 still down (nf_tables/kernel-module mismatch — needs a reboot). Check
 `docker ps` and `uname -r` before assuming it's fixed; **ask before
 rebooting**, it's the user's machine.
 
 ## Priority order
+
+0. **Raise `NODE_BUDGET` in `lib/tracers/bfs.ts` (60 → ~150).** Decided but
+   NOT yet done — needs a go-ahead because it costs API calls and trace
+   time. This is currently the single highest-value change available, and
+   it came out of testing the user's Bitcoin dataset (see below): of four
+   candidates traced at depth 5, one reached Binance and produced a full
+   recommendation, and **all three that missed hit the node-budget cap, not
+   a depth limit** — every one of them ended with `Node budget (60) reached
+   — trace truncated before completing all branches.` They were stopped
+   mid-search, not shown to be exchange-free. Raising the cap should
+   directly raise the share of traces that reach a VASP, which is the
+   headline feature. It's one constant. Re-verify trace duration afterwards
+   (`withPacing` in `lib/rateLimit.ts` serializes one in-flight request per
+   chain API, so wall-clock grows roughly linearly with node count) and
+   re-check the 4-5s trace timing the demo script assumes.
 
 1. **n8n re-verification**, once Docker is up: confirm the live canvas still
    executes after both the Day 4 repaint *and* the new auth gate —
@@ -45,6 +68,57 @@ rebooting**, it's the user's machine.
 5. **Demo-day checklist** (not code): n8n owner-account recreation if the
    `n8n_data` volume gets wiped, plus a fallback recording of the n8n canvas
    executing in case live n8n flakes in front of judges.
+
+## The Bitcoin dataset (`btc_wallets_data.csv`, added 2026-09-09)
+
+The user added a CSV of ~8.5k suspicious Bitcoin wallets at the repo root
+(`address,hash160,n_tx,n_unredeemed,total_received,total_sent,final_balance`).
+It is **not** wired into the app and doesn't need to be — it's a source of
+demo addresses. Already profiled and sample-tested against the real tracer;
+don't redo this from scratch:
+
+- **8,526 rows / 8,506 unique** (20 exact duplicate rows — harmless, just
+  don't report the raw row count as a wallet count).
+- **4,660 (55%) have `total_sent = 0`.** The tracer follows *outgoing*
+  transfers, so these render a single suspect node and nothing else. Filter
+  them out before picking demo addresses.
+- **Very high tx counts are unusable**, even when the address is genuinely
+  interesting. Blockstream returns only ~25 recent txs, so anything older is
+  invisible. Concrete case: `1FfmbHfnpaZjKFvyi1okTjJJusN455paPH` is a real
+  counterparty of the seeded SamSam ransomware address, but has 969 txs — the
+  tracer sees zero outgoing in its window and returns an empty graph. A real
+  link that cannot be demoed. Prefer 3-200 txs; 3-25 is safest (the wallet's
+  whole history fits inside the API window).
+- **Use max depth 5, not 3.** At depth 3, eight of eight sampled candidates
+  produced good graphs and typology flags but reached no labeled address. At
+  depth 5, one of four reached Binance.
+
+**Best demo address found in the dataset:**
+`3FrmCRcGKiTATfreBDM9F17yAUDoDsnWeA` — Bitcoin, **max depth 5**. Produces 60
+nodes, HIGH risk, FAN_OUT + PEEL_CHAIN, reaches **Binance (cold wallet) at
+hop 4** with a real recommendation, so the full path (recommendation → PDF →
+Sahyog routing) is demonstrable. Backups that give good graphs and flags but
+end at the "no VASP reached" state: `155Yv6Hmzs5RT8j6uZAzfWzecvV9FDyu6k`,
+`1CYYS3R6CKD43nCxFbqvEvjr3VUScKswBw`, `3P9WebHkiDxCi8LDXiRQp8atNEagcQeRA3`.
+Note these are *live* addresses — re-verify them before demo day, the same
+drift caution `docs/DEMO_ADDRESSES.md` already makes for the curated set.
+
+**Why BTC recommendations are rare** (worth understanding before assuming
+something is broken): only **2 of the 15 seeded exchange addresses are
+Bitcoin**, both Binance (`prisma/seed.ts`). A BTC trace can only produce a
+recommendation if it routes into one of those. ETH/TRON have far more
+labels, which is why they hit far more often. The second lever after the
+node budget is seeding more BTC exchange addresses — harder than it was for
+ETH, since there's no Etherscan-style public name-tag source for Bitcoin, so
+each address needs individual verification (same bar as the existing seed:
+never add a label without verifying it).
+
+**How to test dataset addresses without polluting the demo DB**: call
+`traceBitcoin` from `lib/tracers/bitcoin.ts` directly in a throwaway `tsx`
+script rather than hitting `POST /api/trace` — the API route persists a
+`Case` row, the library function doesn't. The script has to live inside the
+project (the `@/` path aliases don't resolve from outside it); delete it
+afterwards.
 
 ## Gotchas from this project
 
