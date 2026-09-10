@@ -377,10 +377,13 @@ not through a browser — confirm the shared-secret guard doesn't break
 them), then run the full judge-facing path end to end with a clock on it,
 2-3 times with different addresses.
 
-**3. Small untested edges** (flagged during the Day 4 bug bash, not yet
-closed): double-clicking "Re-route" fast (race on `Case.status`), a valid
-address for the wrong chain selector, whitespace/casing on a pasted
-address.
+**3. Small untested edges — DONE (2026-09-10).** The double-click "race"
+turned out to be a non-issue (the `Case.status` write is idempotent, not a
+read-modify-write). The other two were real and are fixed: a valid address
+against the wrong chain selector now names the chain it actually belongs
+to, and whitespace/`0X`-casing on a pasted address is handled at the API
+trust boundary. Validators live in `lib/address.ts` with a self-check. See
+`PROGRESS.md`'s 2026-09-10 entry.
 
 **4. Pitch rehearsal.** `docs/PITCH.md` is written as the deck source —
 do the actual lift (slides) and rehearse the differentiation-story

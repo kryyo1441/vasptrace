@@ -732,6 +732,62 @@ knowing which trade that is: the curated addresses are fast but show a clean
 1-hop graph, while `3Frm…` is the messy multi-hop laundering visual and
 costs ~25s of dead air. Recorded in `DEMO_ADDRESSES.md`.
 
+### 2026-09-10 — Small untested edges (final-stretch item 3)
+
+The three edges flagged during the Day 4 bug bash and never closed. Tested
+all three live against the running app before changing anything; **one was a
+non-issue, two were real.**
+
+**Double-clicking "Re-route to X" — not a bug, no fix needed.** The worry was
+a race on `Case.status`. There isn't one: the route does a blind
+`update({ data: { status: "ROUTED" } })`, not a read-modify-write, so
+concurrent requests converge on the same value. Verified by firing two truly
+simultaneous POSTs at one case — both returned 200, the row ended `ROUTED`,
+and there was still exactly one row. `SahyogButton` also already guards with
+`disabled={loading}`. The only real side effect is a duplicate fire-and-forget
+n8n notification, which is harmless. (The case mutated during this test was
+restored to `TRACED`.)
+
+**A valid address against the wrong chain selector — real, now fixed.** It
+was rejected with `address is not a valid BITCOIN address`, which is
+technically true and unhelpful: the user pasted a perfectly good address and
+just had the wrong selector. The three address formats don't overlap
+(`0x…` / `1,3,bc1…` / `T…`), so exactly one validator can match and the API
+can name it. Now: *"That looks like an Ethereum address, but Bitcoin is
+selected — switch the chain selector to Ethereum."*
+
+**Whitespace and casing on a pasted address — real, now fixed.** A trailing
+space or a leading newline (what you get pasting out of a PDF or an email)
+failed validation with the same confusing "not a valid address" error, and so
+did an uppercase `0X` prefix, which some explorers emit. `app/page.tsx` was
+already calling `address.trim()`, but the API is the trust boundary every
+caller crosses, so the trim belongs there — the route is now correct on its
+own terms rather than because its one current client happens to be careful.
+The Ethereum validator accepts `0[xX]`; `lib/tracers/ethereum.ts` lowercases
+downstream, so nothing past validation can tell the difference. Bitcoin and
+Tron are deliberately *not* case-folded — they're base58/bech32 and
+case-sensitive, so a lowercased Tron address is a different address.
+
+`ADDRESS_VALIDATORS` moved out of the route into **`lib/address.ts`** with
+`detectChain()`, and gained a self-check (`npx tsx lib/address.test.ts`)
+covering all of the above plus the non-overlap property `detectChain` depends
+on. It's a parser on untrusted input; it deserved one runnable check, and no
+whitelist of permitted `route.ts` exports was *found* in
+`node_modules/next/dist/docs/` — which isn't proof there is none, so putting
+it in `lib/` sidesteps the question rather than betting on the answer.
+
+Verified in the browser at the end, not just by curl: the new message renders
+in the destructive style inside the search panel, and — measured, not
+eyeballed — the paragraph's `scrollWidth` equals its `clientWidth` (213px)
+in a 375px-constrained container, wrapping to 4 lines with no horizontal
+overflow. No `Case` rows leaked from any of this: the DB is still at 82.
+
+One related thing checked and deliberately left alone: `app/page.tsx`'s
+button gate is `disabled={!address || loading}` on the *raw* string, so a
+whitespace-only paste still enables the button, sends `address: ""` after the
+trim, and gets back `address is required` — the right message for that input,
+so no change.
+
 ## Next up
 
 All ten original plan items have a first pass and the app is demo-ready

@@ -6,14 +6,10 @@ import { deriveRiskLevel } from "@/lib/scoring";
 import { notifyN8n } from "@/lib/n8n";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { CHAIN_LABEL } from "@/lib/format";
+import { ADDRESS_VALIDATORS, detectChain } from "@/lib/address";
 import type { Chain } from "@/lib/generated/prisma/client";
 import type { TraceGraph } from "@/lib/tracers/types";
-
-const ADDRESS_VALIDATORS: Record<Chain, RegExp> = {
-  ETHEREUM: /^0x[a-fA-F0-9]{40}$/,
-  BITCOIN: /^(1[a-km-zA-HJ-NP-Z1-9]{25,34}|3[a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{25,90})$/,
-  TRON: /^T[1-9A-HJ-NP-Za-km-z]{33}$/,
-};
 
 const TRACERS: Record<Chain, (address: string, maxDepth: number) => Promise<TraceGraph>> = {
   ETHEREUM: traceEthereum,
@@ -35,11 +31,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { address, chain, maxDepth = 5 } = body as { address?: string; chain?: string; maxDepth?: number };
+  const { address: rawAddress, chain, maxDepth = 5 } = body as { address?: string; chain?: string; maxDepth?: number };
 
-  if (!address || typeof address !== "string") {
+  if (!rawAddress || typeof rawAddress !== "string") {
     return NextResponse.json({ error: "address is required" }, { status: 400 });
   }
+  // Addresses get pasted out of PDFs, emails and chat, which carries
+  // leading/trailing whitespace and newlines with them. app/page.tsx
+  // already trims, but this is the trust boundary every caller crosses —
+  // trimming here means the API is correct on its own terms, not because
+  // its one current client happens to be careful.
+  const address = rawAddress.trim();
   if (!chain || !(chain in ADDRESS_VALIDATORS)) {
     return NextResponse.json({ error: "chain must be one of ETHEREUM, BITCOIN, TRON" }, { status: 400 });
   }
@@ -49,7 +51,17 @@ export async function POST(req: NextRequest) {
 
   const typedChain = chain as Chain;
   if (!ADDRESS_VALIDATORS[typedChain].test(address)) {
-    return NextResponse.json({ error: `address is not a valid ${typedChain} address` }, { status: 400 });
+    // The likely mistake is a valid address pasted against the wrong chain
+    // selector, so say which chain it *is* rather than only what it isn't.
+    const actualChain = detectChain(address);
+    return NextResponse.json(
+      {
+        error: actualChain
+          ? `That looks like ${/^[aeiou]/i.test(CHAIN_LABEL[actualChain]) ? "an" : "a"} ${CHAIN_LABEL[actualChain]} address, but ${CHAIN_LABEL[typedChain]} is selected — switch the chain selector to ${CHAIN_LABEL[actualChain]}.`
+          : `address is not a valid ${CHAIN_LABEL[typedChain]} address`,
+      },
+      { status: 400 }
+    );
   }
 
   try {

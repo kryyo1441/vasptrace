@@ -68,10 +68,19 @@ rebooting**, it's the user's machine.
    fire with zero session. They're deliberately excluded from `proxy.ts`'s
    auth gate rather than given a shared-secret header; verify that decision
    still holds in a real run.
-2. **Small untested edges** flagged during the Day 4 bug bash, still open:
-   double-clicking "Re-route to X" fast (race on `Case.status`), a valid
-   address submitted with the *wrong* chain selector, whitespace/casing on a
-   pasted address.
+2. **Small untested edges — DONE 2026-09-10.** All three tested live. The
+   double-click "race" was a non-issue (the status write is idempotent, not
+   read-modify-write — verified with two simultaneous POSTs). The other two
+   were real and are fixed: a valid address against the wrong chain selector
+   now says which chain it actually is, and whitespace/`0X`-casing on a
+   pasted address is trimmed/accepted at the API boundary. Validators moved
+   to `lib/address.ts` with a self-check (`npx tsx lib/address.test.ts`).
+   See `PROGRESS.md`'s 2026-09-10 entry.
+
+   *If there's spare time only* (not worth a demo window): the wrong-chain
+   error tells the user to switch the selector, but the server already knows
+   the right chain via `detectChain` — the client could just switch it for
+   them. Deliberately not built.
 3. **Full timed judge-facing dry-run**, 2-3 times with different addresses:
    paste address → live trace → graph → n8n canvas → score/recommendation →
    PDF → Sahyog route. Time it.
