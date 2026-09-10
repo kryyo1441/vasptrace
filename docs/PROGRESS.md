@@ -872,8 +872,14 @@ done 2026-09-10 — see the entry below), and the small untested edges (item
 3, done 2026-09-10). **What is actually left: the timed judge-facing
 dry-run, the pitch rehearsal (item 4), and the demo-day checklist (item
 5).** `docs/DEMO_SCRIPT.md` now exists as the runbook for the first of
-those. Summary of what was already open before auth landed, most urgent
-first:
+those.
+
+Separately, and **not** part of the plan: a Vercel deploy exists on the
+`vercel-postgres` branch (Prisma Postgres, code complete, never deployed —
+`docs/DEPLOY.md`). It is optional, last in priority, and must not be merged
+into the demo branch before demo day: the demo's offline fallback depends on
+SQLite being a local file. Summary of what was already open before auth
+landed, most urgent first:
 
 1. **Auth + RBAC — done.** See the 2026-09-09 "Auth" changelog entry above
    for the full design and what was verified. Login gate, sessions, RBAC

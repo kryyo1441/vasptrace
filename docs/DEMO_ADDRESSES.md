@@ -1,7 +1,8 @@
 # Demo addresses — verified live 2026-09-08
 
 Pre-verified so judging-day API flakiness/venue wifi doesn't sink the live
-demo. Each address is one hop from a labeled exchange, chosen so the
+demo. For *how* to run the demo around these, see
+[`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md). Each address is one hop from a labeled exchange, chosen so the
 transfer sits at the *front* of that address's own recent-transaction list
 (the APIs only return the most recent N txs — see the `ponytail:` notes in
 each tracer), which keeps these stable even if the address transacts more

@@ -9,7 +9,11 @@ Built for Smart India Hackathon problem statement 26182 (MHA / I4C). See
 - **Frontend/backend**: Next.js 16 App Router, single repo — pages and API
   routes together, no separate backend service (`app/api/*/route.ts`).
 - **Database**: SQLite via Prisma ORM (`prisma/schema.prisma`), easy to seed
-  and inspect locally.
+  and inspect locally. Deliberately a *file*, not a service — it's what makes
+  the demo's offline fallback work (`/cases` renders stored cases with no
+  network at all). A Postgres port for a Vercel deploy exists on the
+  `vercel-postgres` branch; see [`DEPLOY.md`](./DEPLOY.md), including what it
+  gives up.
 - **Auth**: hand-rolled session auth (`lib/auth.ts`) — Node stdlib only,
   `crypto.scrypt` for password hashing and an HMAC-signed cookie for the
   session. See below for why not `next-auth`.
