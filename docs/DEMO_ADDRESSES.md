@@ -40,7 +40,7 @@ profiled and sample-traced; the full findings are in
 
 | Address | Hits | Notes |
 |---|---|---|
-| `3FrmCRcGKiTATfreBDM9F17yAUDoDsnWeA` | Binance (cold wallet) @ hop 4 | needs **maxDepth 5**, unlike everything above. 60 nodes, HIGH risk, FAN_OUT + PEEL_CHAIN — the best "messy real laundering trail" visual we have, vs. the clean 1-hop addresses above |
+| `3FrmCRcGKiTATfreBDM9F17yAUDoDsnWeA` | Binance (cold wallet) @ hop 4 | needs **maxDepth 5**, unlike everything above. HIGH risk, FAN_OUT + PEEL_CHAIN — the best "messy real laundering trail" visual we have, vs. the clean 1-hop addresses above. Two cautions, both measured 2026-09-10: it renders 60 nodes because it *hits* `NODE_BUDGET` and truncates, not because the graph is that size (at budget 150 it draws 150 and still truncates, with an identical Binance/risk/flags result — see `PROGRESS.md`); and it takes **~25s** to trace (vs. ~1s for the curated one-hop addresses above, which stop on a label immediately), so narrate over the wait |
 
 Two caveats before relying on it: it is **not** pre-verified to the same
 standard as the table above (it was traced once, not re-checked for drift),

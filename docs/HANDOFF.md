@@ -32,20 +32,35 @@ rebooting**, it's the user's machine.
 
 ## Priority order
 
-0. **Raise `NODE_BUDGET` in `lib/tracers/bfs.ts` (60 → ~150).** Decided but
-   NOT yet done — needs a go-ahead because it costs API calls and trace
-   time. This is currently the single highest-value change available, and
-   it came out of testing the user's Bitcoin dataset (see below): of four
-   candidates traced at depth 5, one reached Binance and produced a full
-   recommendation, and **all three that missed hit the node-budget cap, not
-   a depth limit** — every one of them ended with `Node budget (60) reached
-   — trace truncated before completing all branches.` They were stopped
-   mid-search, not shown to be exchange-free. Raising the cap should
-   directly raise the share of traces that reach a VASP, which is the
-   headline feature. It's one constant. Re-verify trace duration afterwards
-   (`withPacing` in `lib/rateLimit.ts` serializes one in-flight request per
-   chain API, so wall-clock grows roughly linearly with node count) and
-   re-check the 4-5s trace timing the demo script assumes.
+0. **Raise `NODE_BUDGET` (60 → ~150) — TESTED 2026-09-10, REJECTED. Don't
+   redo it.** The constant stays at 60 and no code changed. The premise
+   below was that all three depth-5 candidates that reached no VASP were
+   stopped by the node-budget cap rather than shown to be exchange-free.
+   Measured: at budget 150, **0 of 4 converted**, two of the three
+   *exhausted* their whole search space at 89 and 64 nodes with no
+   truncation at all and still hit zero labels, and the good demo address
+   (`3Frm…`) gained nothing but **+32s** (25.5s → 57.7s) for the same
+   Binance hit, same HIGH risk, same flags. Across the 82 existing `Case`
+   rows only **2 traces (2.4%) ever hit the cap**, both Ethereum, and one of
+   those two still produced a recommendation — so ETH/TRON aren't
+   budget-bound either. `FANOUT_CAP` is dead for the same reason. Full
+   numbers in `PROGRESS.md`'s 2026-09-10 entry. **The only lever left on
+   VASP hit-rate is BTC label coverage** (2 of 15 seeded exchange addresses
+   are Bitcoin, both Binance) — that's the "second lever" noted further
+   down, and it needs the user's call.
+
+   Also settled while measuring: the "4-5s trace timing the demo script
+   assumes" was unsourced — no demo-script file exists and no timing figure
+   appeared anywhere in `docs/`. Measured, and it's **good news for the
+   demo**: the scripted judge-facing path is **~1s**, not 4-5s
+   (`0x6eedf…`/WazirX at depth 1 = 1.4s; curated BTC at depth 1 = 0.9s) —
+   the curated addresses are one hop from a labeled exchange, so the trace
+   stops on the label immediately. Only the *deep dataset* addresses are
+   slow: `3Frm…` at depth 5 is **~25s** because it explores 60 unlabeled
+   nodes at ~0.25-0.45s each (`withPacing` serializes one API call per
+   chain). So item 3's dry-run is only pacing-constrained if it demos
+   `3Frm…` — the trade is fast-but-clean-1-hop vs. 25s of dead air for the
+   messy multi-hop laundering visual.
 
 1. **n8n re-verification**, once Docker is up: confirm the live canvas still
    executes after both the Day 4 repaint *and* the new auth gate —

@@ -643,6 +643,95 @@ touched four more files.
   Day 3) — if a change that should obviously work doesn't, check for a
   stale dev-server module cache before re-reading the diff.
 
+### 2026-09-10 — Node budget: measured, and the raise rejected
+
+`HANDOFF.md`'s priority item 0 was "raise `NODE_BUDGET` in
+`lib/tracers/bfs.ts` (60 → ~150)", described there as the single
+highest-value change available and decided-but-not-done. **Measured it, and
+it does not hold. The constant stays at 60.** No code changed; this entry is
+the record so nobody re-derives it.
+
+The premise was that of four Bitcoin dataset candidates traced at depth 5,
+the three that reached no VASP all ended on `Node budget (60) reached`, so
+they were "stopped mid-search, not shown to be exchange-free". The inference
+was reasonable. It's wrong on the facts. Traced all four at 150 by calling
+`traceBitcoin` directly (throwaway `tsx` script, deleted — never
+`POST /api/trace`, which would persist `Case` rows):
+
+| address | budget | wall-clock | nodes | max hop | risk | flags | VASP |
+|---|---|---|---|---|---|---|---|
+| `3FrmCRcGKiTATfreBDM9F17yAUDoDsnWeA` | 60 | **25.5s** | 60 (truncated) | 4 | HIGH | FAN_OUT + PEEL_CHAIN | Binance @ hop 4 |
+| `3FrmCRcGKiTATfreBDM9F17yAUDoDsnWeA` | 150 | **57.7s** | 150 (truncated) | 5 | HIGH | FAN_OUT + PEEL_CHAIN | Binance @ hop 4 |
+| `155Yv6Hmzs5RT8j6uZAzfWzecvV9FDyu6k` | 150 | 22.9s | 89 (**completed**) | 5 | HIGH | FAN_OUT + PEEL_CHAIN | none |
+| `1CYYS3R6CKD43nCxFbqvEvjr3VUScKswBw` | 150 | 44.3s | 150 (truncated) | 5 | HIGH | FAN_OUT + PEEL_CHAIN | none |
+| `3P9WebHkiDxCi8LDXiRQp8atNEagcQeRA3` | 150 | 21.4s | 64 (**completed**) | 5 | HIGH | FAN_OUT + PEEL_CHAIN | none |
+
+- **0 of 4 misses converted to a hit.** Two of the three exhausted their
+  entire search space at 89 and 64 nodes with the budget at 150 — no
+  truncation warning at all — and still reached zero labeled addresses. They
+  aren't budget-limited; they are genuinely exchange-free within reach at
+  depth 5. Raising the cap only let them prove it.
+- **On the primary demo address the raise buys nothing but latency**: same
+  Binance hit at hop 4, same HIGH risk, same two flags, +32s.
+- Risk level and typology flags were **stable** across both budgets, so the
+  numbers quoted in `DEMO_ADDRESSES.md` would have survived the change. That
+  was the one real regression risk (`applyConfidenceClustering` and
+  `applyTypologyFlags` run over the whole node list, so a bigger list could
+  have moved them) and it didn't materialise.
+
+**The budget is almost never the binding constraint in real use** — settled
+from the 82 existing `Case` rows, no API calls, since `traceResult` stores
+`warnings`:
+
+| chain | cases | hit the node budget | produced a recommendation |
+|---|---|---|---|
+| ETHEREUM | 55 | 2 | 33 |
+| BITCOIN | 12 | 0 | 9 |
+| TRON | 15 | 0 | 13 |
+
+2 of 82 traces (2.4%) ever hit the cap, both Ethereum — and one of those two
+still produced a Binance recommendation. Across the whole case history the
+raise could have helped at most **one** trace. This also closes the gap that
+`NODE_BUDGET` is shared by all three chains and only Bitcoin was probed
+directly: ETH and TRON aren't budget-bound either, on evidence rather than
+inference.
+
+`FANOUT_CAP = 5` is ruled out by the same data — two graphs exhausted at
+depth 5 with only 64-89 nodes are naturally thin, so more breadth explores
+more *unlabeled* space, not more exchanges. **Both breadth levers are dead.
+BTC label coverage is the only lever left** (2 of 15 seeded exchange
+addresses are Bitcoin, both Binance — `prisma/seed.ts`), and it's the user's
+call: the primary demo address already reaches Binance and produces a full
+recommendation, so more BTC labels buy robustness if a judge pastes *their
+own* address, which is a different risk than the one item 0 claimed to solve.
+
+**Separately, trace timing — measured, and it's good news.** `HANDOFF.md`
+said to "re-check the 4-5s trace timing the demo script assumes". There is
+no demo-script file and no timing figure anywhere in `docs/`, so the 4-5s
+number was unsourced. Measured:
+
+| path | depth | nodes | wall-clock |
+|---|---|---|---|
+| `0x6eedf…` (WazirX, **the headline demo address**) | 1 | 2 | **1.4s** |
+| `0x6eedf…` same address | 3 | 2 | 0.6s |
+| `1CRLGcaXajtWVF5EopZgQUqE12dKn8Rtuh` (curated BTC) | 1 | 3 | **0.9s** |
+| `3FrmCRcGKiTATfreBDM9F17yAUDoDsnWeA` (dataset backup) | 5 | 60 | **25.5s** |
+
+**The scripted judge-facing path is ~1s, faster than the 4-5s anyone
+assumed** — the curated addresses are all one hop from a labeled exchange,
+so the trace stops on the label almost immediately and depth barely matters
+(depth 3 on the same address costs no more than depth 1). The ~25s figure
+belongs *only* to the deep dataset addresses at depth 5, which explore 60+
+unlabeled nodes. That is inherent rather than a regression: `withPacing`
+(`lib/rateLimit.ts`) serializes one in-flight request per chain API, and the
+four deep runs above put it at a consistent **~0.25-0.45s per node** (250ms
+pacing + round-trip, one API call per expanded node).
+
+So the timed dry-run only has a pacing problem if it demos `3Frm…`. Worth
+knowing which trade that is: the curated addresses are fast but show a clean
+1-hop graph, while `3Frm…` is the messy multi-hop laundering visual and
+costs ~25s of dead air. Recorded in `DEMO_ADDRESSES.md`.
+
 ## Next up
 
 All ten original plan items have a first pass and the app is demo-ready
