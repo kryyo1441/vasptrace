@@ -373,9 +373,12 @@ at all. Scoped tightly for the remaining time, not full IAM:
 **2. n8n + full timed dry-run (carried over from Day 4, unblocked once
 Docker is up).** Re-verify the live n8n canvas survived both the repaint
 and the new auth gate (n8n's webhook calls hit the ack routes directly,
-not through a browser — confirm the shared-secret guard doesn't break
-them), then run the full judge-facing path end to end with a clock on it,
-2-3 times with different addresses.
+not through a browser — **correction, 2026-09-10: there is no shared-secret
+guard.** The ack routes were excluded from the auth gate outright, per item
+1's correction above; the thing to confirm is that they stay reachable with
+*zero* session through `proxy.ts`. Verified 2026-09-10, both routes 200 —
+see `PROGRESS.md`), then run the full judge-facing path end to end with a
+clock on it, 2-3 times with different addresses.
 
 **3. Small untested edges — DONE (2026-09-10).** The double-click "race"
 turned out to be a non-issue (the `Case.status` write is idempotent, not a

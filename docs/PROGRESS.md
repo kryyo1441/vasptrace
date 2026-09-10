@@ -788,18 +788,92 @@ whitespace-only paste still enables the button, sends `address: ""` after the
 trim, and gets back `address is required` — the right message for that input,
 so no change.
 
+### 2026-09-10 — n8n re-verification after auth, and the canvas-animation finding
+
+Final-stretch item 2's app-side half. Docker came back without a reboot this
+time: the running kernel is now `6.18.50-2-lts` and `/lib/modules` has a
+matching tree, so the Day 4 mismatch is gone — the daemon was simply
+`inactive`, and `modprobe nf_tables` + `systemctl start docker` brought it
+up. The `n8n_data` volume survived, so both workflows were still imported,
+still **Published**, and the browser session was still valid: no owner-account
+recreation needed (that remains the demo-day risk if the volume is ever
+wiped).
+
+- **The ack routes still work with zero session through `proxy.ts`** — this
+  was the specific open question after auth landed. Both verified live:
+  `POST /webhook/vasptrace-sahyog` → `/api/n8n/sahyog-ack` `200`, and
+  `POST /webhook/vasptrace-trace` with `hitVaspOrMixer: true` → the IF node's
+  true branch → `/api/n8n/trace-ack` `200`. The Day 3 IF-node fix
+  (`typeVersion: 2.2`) survived; production webhooks both register.
+  `PLAN.md`'s Final-stretch item 2 told a future reader to "confirm the
+  shared-secret guard doesn't break them" — there is no such guard, the
+  routes were excluded from the gate outright. Corrected in place there.
+- **The canvas-animation claim was wrong as written, and is now fixable.**
+  Day 3 recorded that an *active* workflow doesn't animate the editor —
+  executions only show up under Executions after the fact. That quietly
+  invalidated `PITCH.md` §2.4/§9's "judges watch the automation execute in
+  real time on a live canvas", which is the entire stated point of item 6.
+  Tested the alternative: with `.env` pointed at the `/webhook-test/` URLs
+  and **Execute workflow** clicked to arm the canvas, the editor *does*
+  render the run — green checkmarks on every executed node, green edges
+  labelled "1 item", the **true** branch flowing into "Push result to
+  VASPtrace dashboard", and "No VASP/mixer reached" left grey and
+  unexecuted. Verified twice: once with a synthetic payload, once
+  end-to-end from a real `POST /api/trace` through the app. So the pitch
+  claim holds *in test mode only*.
+- **The cost, measured not assumed**: n8n's test webhook is **one-shot per
+  arming**. Fired a second call without re-clicking Execute workflow → `404`
+  (n8n's own 404 body says so: "the webhook only works for one call after
+  you click this button"). Every trace needs re-arming, and the two
+  workflows arm independently — so the Sahyog click needs its own arming
+  step, separate from the trace. Forgetting either doesn't break anything
+  (the notify is still fire-and-forget) but does surface the "n8n
+  unreachable" warning banner mid-demo. `.env` was **restored to the
+  production URLs** at the end of the session; the swap is one `sed`, in the
+  runbook.
+- **Trace timing re-confirmed against the live app**, not just the library:
+  `0x6eedf…` at depth 1 through `POST /api/trace` took **1.33s** and
+  returned 2 nodes, WazirX at high confidence, recommendation score **8**
+  (FIU-IND ✓, nodal officer ✓, reliability 4, −1 hop). Matches
+  `DEMO_ADDRESSES.md` and the 2026-09-10 timing entry above exactly.
+- **`docs/DEMO_SCRIPT.md` written** — the judge-facing runbook that the
+  earlier timing entry noted did not exist. Pre-flight (Docker, webhook
+  registration check, the test-mode `.env` swap, service-worker check),
+  nine numbered demo steps with measured timings and what to say at each,
+  the two arming steps placed where they belong, a failure table, the
+  reset procedure, and the address cheat sheet. Button labels were read out
+  of the source (`Run trace`, `Download PDF report`, `Route disclosure
+  request to {vasp}`) rather than recalled.
+- **Case-count question settled.** `PITCH.md` §11 said "81 real cases" while
+  the DB holds 82. Queried it: all **82** rows belong to the `investigator`
+  account and the supervisor has **0**, so both demo logins show 82 on the
+  dashboard stat tile (the supervisor's RBAC-verification case from the auth
+  session was evidently cleaned up then, leaving the 81 backfilled rows plus
+  the user's own `bc1qydnt…` Bitcoin trace). `PITCH.md` updated to 82. The
+  one test case created during this session was deleted afterwards; the DB
+  is back at 82.
+
+Not done, still open: the **timed** judge-facing dry-run (a person has to
+run it with a clock — `DEMO_SCRIPT.md` is what to run), the pitch rehearsal,
+and the demo-day checklist.
+
 ## Next up
 
 All ten original plan items have a first pass and the app is demo-ready
-end to end. Real submission deadline is **2 days out, ~4 working windows**
-— see `PLAN.md`'s "Final stretch" section (right after the old "Day 5 —
-Buffer + pitch" stub, which it supersedes) for the authoritative priority
-order. **Item 1 (auth + RBAC) is done** — both phases shipped and verified
-live, see the changelog entry above. Next up, in order: n8n re-verification
-(once Docker is up) including confirming the ack routes still work
-unauthenticated through the new proxy gate, the small untested edges, then
-the pitch rehearsal. Summary of what was already open before auth landed,
-most urgent first:
+end to end. Real submission deadline is **2026-09-11 — one day out** (the
+"~4 working windows" figure written on 2026-09-09 is stale by a day; treat
+one or two windows as the real budget). See `PLAN.md`'s "Final stretch"
+section (right after the old "Day 5 — Buffer + pitch" stub, which it
+supersedes) for the authoritative priority order.
+
+**Final-stretch items 1, 2 and 3 are all done.** Auth + RBAC (item 1), n8n
+re-verification including the ack routes through the proxy gate (item 2,
+done 2026-09-10 — see the entry below), and the small untested edges (item
+3, done 2026-09-10). **What is actually left: the timed judge-facing
+dry-run, the pitch rehearsal (item 4), and the demo-day checklist (item
+5).** `docs/DEMO_SCRIPT.md` now exists as the runbook for the first of
+those. Summary of what was already open before auth landed, most urgent
+first:
 
 1. **Auth + RBAC — done.** See the 2026-09-09 "Auth" changelog entry above
    for the full design and what was verified. Login gate, sessions, RBAC
@@ -816,12 +890,16 @@ most urgent first:
 - Item 1: no pagination on the Bitcoin/Tron fetchers (Blockstream caps at
   ~25 recent txs, Tronscan capped at 50) — fine for a demo trace, would
   matter for a real caseload.
-- Item 6: **closed, but re-verify after auth lands.** The live n8n
+- Item 6: **closed, and re-verified after auth (2026-09-10).** The live n8n
   rehearsal ran on Day 3 — both workflows imported, activated and confirmed
   executing on the canvas from a real trace and a real Sahyog click, after
   fixing two bugs in the committed workflow JSON that only a live run could
-  have exposed (see the 2026-09-09 changelog entry). Residual risk is now
+  have exposed (see the 2026-09-09 changelog entry). The auth-gate watch
+  point is now closed too: both ack routes verified reachable with zero
+  session through `proxy.ts` (2026-09-10 entry). Residual risk is
   setup-shaped, not correctness-shaped: n8n asks for an owner account on
   first boot, so if the `n8n_data` volume is ever recreated on demo day
-  someone has to re-create that account before the webhooks work — plus
-  the new auth-gate watch point above.
+  someone has to re-create that account before the webhooks work. Plus one
+  demo-technique constraint found on 2026-09-10 — the live-canvas visual
+  requires the `/webhook-test/` URLs and a **one-shot** re-arming click
+  before *every* trigger; see `DEMO_SCRIPT.md`.

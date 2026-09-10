@@ -363,7 +363,7 @@ not just that it works.
 - **16 VASPs** in the legal-actionability registry, **18** individually
   source-verified labeled addresses (exchanges, mixers, a ransomware
   address)
-- **81 real cases** traced during development and demo rehearsal — not a
+- **82 real cases** traced during development and demo rehearsal — not a
   handful of cherry-picked screenshots
 - **10/10** original plan items shipped with a working first pass by day 1,
   hardened through day 4 — plus auth and RBAC, added after the fact when a
