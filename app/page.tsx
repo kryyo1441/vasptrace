@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { GraphView } from "@/components/graph-view";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
-import { vaspLine } from "@/lib/format";
+import { edgeCountLabel, vaspLine } from "@/lib/format";
 import type { TraceGraph, TypologyFlag } from "@/lib/tracers/types";
 import { AlertTriangle, ArrowRight, Loader2, Network, Search, Shield, Wallet } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -164,7 +164,7 @@ export default function Home() {
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Network className="size-4 text-muted-foreground" aria-hidden="true" />
-                Trace result — {graph.nodes.length} addresses, {graph.edges.length} transfers
+                Trace result — {graph.nodes.length} addresses, {edgeCountLabel(graph)}
               </CardTitle>
               {caseId && (
                 <Link
