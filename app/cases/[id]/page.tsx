@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { canAccessCase, getCurrentUser } from "@/lib/auth";
+import { edgeCountLabel, evidenceTrail, hasValueTransfer } from "@/lib/format";
 import { GraphView } from "@/components/graph-view";
 import { SahyogButton } from "@/components/sahyog-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -89,7 +90,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Network className="size-4 text-muted-foreground" />
-              Trace graph — {graph.nodes.length} addresses, {graph.edges.length} transfers
+              Trace graph — {graph.nodes.length} addresses, {edgeCountLabel(graph)}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -141,10 +142,11 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
               alreadyRouted={kase.status === "ROUTED"}
               address={kase.address}
               chain={kase.chain}
-              // Mirrors app/api/cases/[id]/sahyog/route.ts's evidenceTrail
-              // slice exactly, so the email draft cites the same evidence
-              // the actual (simulated) routed payload would.
-              evidenceTrail={graph.edges.slice(0, 10).map((e) => e.latestTxHash)}
+              // Same lib/format.ts builder the real (simulated) routed
+              // payload uses, so the draft can't cite different evidence
+              // than the request does.
+              evidenceTrail={evidenceTrail(graph)}
+              valueMoved={hasValueTransfer(graph)}
             />
           </CardContent>
         </Card>
