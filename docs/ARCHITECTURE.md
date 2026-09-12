@@ -12,7 +12,7 @@ Built for Smart India Hackathon problem statement 26182 (MHA / I4C). See
   and inspect locally. Deliberately a *file*, not a service — it's what makes
   the demo's offline fallback work (`/cases` renders stored cases with no
   network at all). A Postgres port for a Vercel deploy exists on the
-  `vercel-postgres` branch; see [`DEPLOY.md`](./DEPLOY.md), including what it
+  `vercel-postgres` branch; see `docs/DEPLOY.md` **on that branch** (it does not exist on this one, so the link would 404 here), including what it
   gives up.
 - **Auth**: hand-rolled session auth (`lib/auth.ts`) — Node stdlib only,
   `crypto.scrypt` for password hashing and an HMAC-signed cookie for the
@@ -72,11 +72,50 @@ says the same for TRX in an in-code comment, and
 [`DEMO_ADDRESSES.md`](./DEMO_ADDRESSES.md) explains why the Tron demo
 addresses were picked from native deposits specifically).
 
-The consequence worth knowing before debugging: a suspect who moved funds in
-USDT renders as a single node with no outgoing edges. That looks like a bug
-or a dead address and is neither. Closing this is
+The consequence worth knowing before debugging, **measured 2026-09-12 and
+chain-dependent**: on **Tron** a USDT mover really does render as a single
+node with no outgoing edges (the adapter filters `contractType === 1`). On
+**Ethereum** it does something less obvious — the ERC-20 transfer is still a
+transaction *from* the suspect, so the trace draws an edge to the **token
+contract** and the real recipient never appears. Either way it looks like a
+bug or a dead address and is neither. Closing this is
 [`ROADMAP.md`](./ROADMAP.md) item 1 — ranked first because USDT-TRC20 is the
 rail most Indian investment-fraud proceeds actually move on.
+
+## Edges say whether value actually moved
+
+The tracers read **transactions**, and a transaction that moves no value is
+an interaction, not a payment. So every `TraceEdge` carries
+`kind: "TRANSFER" | "CONTRACT_CALL"` (`lib/tracers/types.ts`), classified in
+`lib/tracers/bfs.ts` from whether the edge's aggregate value is zero.
+
+This is not a cosmetic distinction, and it is load-bearing in the one place
+that matters most. Before it existed, the headline demo address reached
+WazirX purely through 92 zero-value calls into WazirX's Gnosis Safe multisig
+— and the app rendered that as `0.0000 ETH · 92 tx`, counted it as a
+"transfer" on `/` and `/cases/[id]`, and cited its hashes in a **disclosure
+request that asks the VASP about addresses which "received funds"**. No funds
+had moved. See [`ROADMAP.md`](./ROADMAP.md) item 0 for the measurements.
+
+Everything that reads an edge now goes through `lib/format.ts`, so the canvas,
+the PDF and the legal payload cannot disagree:
+
+| Helper | Used by | Behaviour |
+|---|---|---|
+| `edgeAmountLabel` | graph canvas | `"92 contract calls · no value moved"` — never names a currency or an amount for a call. Dust transfers read `< 0.0001 ETH`, so a real-but-tiny amount can't be confused with nothing |
+| `edgeCountLabel` | `/`, `/cases/[id]`, PDF | `"0 transfers, 1 contract-call link (no value)"` |
+| `evidenceTrail` | Sahyog payload + email draft | transfers first (so the 10-hash cap can't drop a real transfer for a call), call hashes annotated `(contract call — no value moved)` |
+| `hasValueTransfer` | email draft | when false the draft drops the "received funds" ask entirely and says the evidence is contract interactions, not incoming funds |
+
+On the canvas a call edge is dashed, thinner, muted violet and carries **no
+directional particles** — the particles animate value in motion, which is the
+wrong story for an edge that moved none — plus a legend key shown only when
+the trace has one.
+
+**Back-compat is a deliberate contract.** The stored `Case.traceResult` blobs
+predate the field, so every read tests `=== "CONTRACT_CALL"` and never
+`!== "TRANSFER"`: an old case renders exactly as it did when it was
+generated. `lib/format.test.ts` asserts this against a `kind`-less edge.
 
 ## What's live vs. simulated
 

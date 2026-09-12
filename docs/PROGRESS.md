@@ -1067,6 +1067,19 @@ native-only today, item 1), Bitcoin entity clustering, issuer freeze paths,
 bridge traversal, live label sync, monitoring, and the mixer-demixing
 experiment last as the one heuristic item.
 
+**`ROADMAP.md` item 0 (edge TRANSFER vs CONTRACT_CALL) shipped 2026-09-12** —
+see the two entries below. **Item 1 (token/stablecoin tracing) is next**, and
+two of its open questions are already settled: `tokentx` is verified live on
+the v2 API, and it needs **no migration**, because `Case.traceResult` is a
+JSON blob — so the two-branch schema constraint does not gate it. Its graph
+question is settled too: assets cannot be summed per counterparty (USDT is 6
+decimals against ETH's 18).
+
+**Before starting it, note that nothing from 2026-09-12 is committed** — see
+`HANDOFF.md`'s STATE paragraph. Eleven source files, six docs, and two
+untracked additions (`docs/ROADMAP.md`, `lib/format.test.ts`) are all
+verified but uncommitted.
+
 Two constraints gate most of it, both written up in `ROADMAP.md`: the two
 branches have diverged enough to break a build on switch, so schema work
 costs two migrations until that's reconciled; and extra per-node API calls

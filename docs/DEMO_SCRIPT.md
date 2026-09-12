@@ -144,6 +144,21 @@ Expected result: 2 nodes, 1 edge, WazirX at **high** confidence,
 recommendation score **8** (FIU-IND registered ✓, India nodal officer ✓,
 reliability 4, minus 1 hop).
 
+> **Know this before a judge asks.** That single edge is **dashed violet**,
+> labelled `92 contract calls · no value moved`, and the header reads
+> `0 transfers, 1 contract-call link (no value)`. It is correct, not a bug:
+> this address never sent ETH or tokens to WazirX — it made 92 zero-value
+> calls into WazirX's Gnosis Safe multisig, all inside the 2024-07-18→22
+> WazirX hack window. **Do not say "the funds moved to WazirX."** Say:
+>
+> > "Note the tool is not claiming a transfer here — that edge is dashed
+> > because no value moved. What it found is 92 contract calls into WazirX's
+> > multisig across the four days of the WazirX hack. A tool that showed
+> > that as a payment would be lying to an investigator, so it doesn't."
+>
+> That is a stronger answer than a transfer would have been. See
+> `DEMO_ADDRESSES.md` and `ROADMAP.md` item 0.
+
 ### Step 3 — The n8n moment (30s) ← *this is the differentiator slide*
 
 Turn to the n8n tab. The canvas now shows:
@@ -192,6 +207,12 @@ Open the case from `/cases`, click **Download PDF report**. Open it.
 
 > "Generated from the stored trace — no re-computation, no placeholder data.
 > Case ID, hop-by-hop narrative, evidence trail with real transaction hashes."
+
+The summary line reads `3 hops · 2 addresses · 0 transfers · 1 contract-call
+link (no value)`, and the evidence rows carry `contract calls — no value
+moved`. Consistent with the graph on purpose — the count label and the
+evidence trail come from the same `lib/format.ts` helpers the canvas uses, so
+the PDF cannot contradict the screen.
 
 ### Step 7 — Arm the second canvas (5s)
 
@@ -274,12 +295,15 @@ Delete only the rows you just created, by id:
 
 ```bash
 sqlite3 dev.db "delete from \"Case\" where id='<the-id>';"
-sqlite3 dev.db "select count(*) from \"Case\";"   # should return to 82
+sqlite3 dev.db "select count(*) from \"Case\";"   # back to the pre-demo count
 ```
 
-> **Check `createdAt` before deleting anything.** The DB should sit at **82**
-> cases. Case `cmtuarozi00008iyf9ma7ibz5` (Bitcoin, 2026-09-09) is the user's
-> own trace, not test pollution — see `HANDOFF.md`.
+> **Check `createdAt` before deleting anything.** The baseline is **83** cases
+> as of 2026-09-12 (it was 82 until the user traced another address that day),
+> so treat it as a landmark rather than a checksum and delete only the rows
+> *this* run created. Two Bitcoin cases are the user's own traces, not test
+> pollution: `cmtuarozi00008iyf9ma7ibz5` (2026-09-09) and one from
+> 2026-09-12 07:29Z. See `HANDOFF.md`.
 
 To put `.env` back to production webhooks afterwards:
 

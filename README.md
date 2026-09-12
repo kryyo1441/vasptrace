@@ -11,7 +11,10 @@ for how it's built and what's live vs. simulated,
 [`docs/ROADMAP.md`](./docs/ROADMAP.md) for what's next.
 
 Tracer scope: **native transfers only** (ETH/BTC/TRX) — ERC-20/TRC-20 token
-flows including USDT are not followed yet (`docs/ROADMAP.md` item 1).
+flows including USDT are not followed yet (`docs/ROADMAP.md` item 1). Graph
+edges distinguish a real value `TRANSFER` from a zero-value `CONTRACT_CALL`,
+so an interaction is never presented as a payment — including in the
+generated disclosure request (`docs/ROADMAP.md` item 0).
 
 ## Setup
 

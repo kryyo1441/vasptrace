@@ -16,17 +16,26 @@ The authoritative priority order is **[`ROADMAP.md`](./ROADMAP.md)**, written
 2026-09-12. `PLAN.md` is the frozen 5-day brief — history, not a to-do list.
 `PROGRESS.md`'s recent changelog entries are still the record of what shipped.
 
-**STATE**: all *tracked* files committed, but the working tree has ~9
-untracked files at the repo root (screenshots, a PDF export, `archive.zip`,
+**STATE (2026-09-12): nothing from the last two sessions is committed.**
+This line used to say all tracked files were. Uncommitted right now:
+`README.md` plus six files in `docs/` (post-submission doc work), **eleven
+source files** implementing `ROADMAP.md` item 0, and two untracked additions
+— `docs/ROADMAP.md` and `lib/format.test.ts`. All of it is verified (5
+self-checks, `tsc`, `eslint`, `next build` clean at 12 routes) and none of it
+is committed, so `git log` does not show the current state of this project.
+Commit it or review it first, before starting anything new.
+
+The working tree also has ~9 unrelated untracked files at the repo root (screenshots, a PDF export, `archive.zip`,
 `btc_wallets_data.csv`, `dev.db.pre-auth`, a `.pcap`). They are the user's,
 mostly unrelated to the app — leave them alone, and don't `git add -A`.
 Only two matter here: `btc_wallets_data.csv` (documented below) and
 `dev.db.pre-auth` (a pre-auth DB snapshot — do not delete).
 
 Demo accounts: `investigator` / `vasptrace-investigator-2026`, `supervisor` /
-`vasptrace-supervisor-2026` (also in `README.md`). All 82 cases belong to the
-investigator account; the supervisor has 0, so both logins show 82 on the
-dashboard.
+`vasptrace-supervisor-2026` (also in `README.md`). Every case belongs to the
+investigator account and the supervisor owns none but sees them all, so both
+logins show the same count on the dashboard — **83 as of 2026-09-12**, see
+below.
 
 **Everything the 5-day plan asked for is done** — all 10 core items plus auth
 and RBAC. The dry-run (old item 3) and pitch rehearsal (old item 4) were the
@@ -42,17 +51,24 @@ kept below only as history.
 - **`vercel-postgres` — the deploy branch. Prisma Postgres.** Code complete
   and locally verified, but **nothing has ever been deployed and the
   migration has never been applied to a real database** — it needs a
-  connection string the user has to create. See `docs/DEPLOY.md`, which
+  connection string the user has to create. See `docs/DEPLOY.md` — which
+  lives **only on the `vercel-postgres` branch**, not this one, so
+  `git show vercel-postgres:docs/DEPLOY.md` is how you read it from here. It
   states exactly what is and isn't verified. **Do not merge it into the
   demo branch before demo day.**
 
-**Don't "clean up" the case count.** The DB is at **82** cases: the 81
-backfilled ones plus one the *user* traced themselves
-(`bc1qydntupzckl7m09a5mvaqsh5wvhexkt0rrsfjth`, the first address in the
-Bitcoin dataset below — 54 nodes, HIGH risk, both typology flags). It looks
-like leftover test pollution and is not. Verify who created a case before
-deleting anything; test cases created during a session should be deleted at
-the end of that session, but this one is the user's own work.
+**Don't "clean up" the case count.** The DB is at **83** cases (was 82 until
+2026-09-12): the 81 backfilled ones plus **two** the *user* traced
+themselves — `bc1qydntupzckl7m09a5mvaqsh5wvhexkt0rrsfjth` (2026-09-09, the
+first address in the Bitcoin dataset below — 54 nodes, HIGH risk, both
+typology flags) and a second Bitcoin trace from 2026-09-12 07:29Z. Both look
+like leftover test pollution and neither is.
+
+Treat the number as a landmark, not a checksum — it moves whenever the user
+traces something. **The rule that matters is: check `createdAt` and
+`createdById` before deleting anything.** Test cases a session creates should
+be deleted at the end of that session (the 2026-09-12 sessions did delete
+theirs); the user's own rows stay.
 
 **Startup**: `npm run dev`, then log in at `localhost:3000/login`.
 
@@ -71,6 +87,10 @@ was the pre-submission priority order. It is preserved because items 0-2
 record *measurements and rejected approaches* that are still true and still
 worth not redoing — but items 3-6 are deadline-bound tasks that no longer
 apply.
+
+> **Careful: there are two different "item 0"s.** The one below is the
+> rejected `NODE_BUDGET` raise. `ROADMAP.md`'s item 0 is the edge
+> TRANSFER/CONTRACT_CALL work, which shipped 2026-09-12. Unrelated.
 
 0. **Raise `NODE_BUDGET` (60 → ~150) — TESTED 2026-09-10, REJECTED. Don't
    redo it.** The constant stays at 60 and no code changed. The premise
@@ -167,7 +187,7 @@ apply.
    gotcha below and `PROGRESS.md` 2026-09-12), and `ROADMAP.md`'s constraints
    section says to reconcile them — or declare one dead — before any phase-2
    schema work. That decision and this deploy are the same decision now.
-   Branch `vercel-postgres`, code complete, never deployed. `docs/DEPLOY.md` has the six remaining steps
+   Branch `vercel-postgres`, code complete, never deployed. `docs/DEPLOY.md` (on that branch only) has the six remaining steps
    and is explicit about what is unverified. Roughly 90 minutes including
    the 82-row data import. **Only if the dry-run and the pitch are already
    done** — it is new scope that appears nowhere in `PLAN.md`, and three
@@ -264,10 +284,36 @@ All logged in `PROGRESS.md`, but worth having front-of-mind:
   end of the 2026-09-10 session; restart with `npm run dev`.)
 - **The tracer follows native transfers only — no ERC-20, no TRC-20, no
   USDT.** `lib/etherscan.ts:30` uses `action=txlist` (native ETH);
-  `lib/tronscan.ts:9-12` says the same for TRX in an in-code comment. Easy to
-  assume otherwise, and it has a real consequence: a suspect who moves funds
-  in USDT renders as a single node with no outgoing edges, which looks like a
-  bug or a dead address and is neither. This is `ROADMAP.md` item 1.
+  `lib/tronscan.ts:9-12` says the same for TRX in an in-code comment. This is
+  `ROADMAP.md` item 1, and `tokentx` is already verified working for it.
+
+  **The consequence is chain-dependent — corrected 2026-09-12 by
+  measurement.** This gotcha used to say a USDT mover "renders as a single
+  node with no outgoing edges". True on **Tron** only. On **Ethereum** the
+  ERC-20 transfer is still a transaction *from* the suspect, so the trace
+  draws an edge to the **token contract** and the real recipient never
+  appears — a phantom node, not a visible dead end.
+- **Edges carry `kind: TRANSFER | CONTRACT_CALL`** (`lib/tracers/types.ts`),
+  because the tracers read transactions and a zero-value contract call is not
+  a payment. Read it as `=== "CONTRACT_CALL"`, **never** `!== "TRANSFER"` —
+  the 83 stored `Case.traceResult` blobs predate the field and must keep
+  rendering as transfers. All edge display and the legal payload go through
+  `lib/format.ts` (`edgeAmountLabel`, `edgeCountLabel`, `evidenceTrail`,
+  `hasValueTransfer`); don't re-derive any of it at a call site. `ROADMAP.md`
+  item 0 has the full story.
+- **The headline demo address is an interaction, not a fund flow.**
+  `0x6eedf92f…728066`'s 92 outgoing txs are *all* zero-value calls into
+  `0x27fd43ba…60c9b4`, which is WazirX's **Gnosis Safe multisig**, all inside
+  the 2024-07-18→22 WazirX hack window. It moved no ETH and no tokens. The
+  WazirX recommendation still fires (it comes from the labeled *node*, not
+  the edge), but don't narrate it as "funds moved to WazirX" — see
+  `DEMO_ADDRESSES.md`.
+- **When you change the edge model, grep every consumer of `edges`.** Item 0's
+  first pass fixed the canvas and the PDF and missed
+  `app/api/cases/[id]/sahyog/route.ts`, whose `evidenceTrail` fed a
+  disclosure request that asks the VASP about addresses which "received
+  funds" — while citing zero-value call hashes. The legal output path is the
+  easiest one to forget and the worst one to get wrong.
 - **`recommendedVaspId` holds a VASP *name*, not an id.**
   `app/api/trace/route.ts` writes `recommendation.top.vaspName` into it. The
   column is misnamed and `app/cases/page.tsx`'s `vaspName.get(...)` lookup

@@ -140,7 +140,7 @@ project convention, enforced from day one.
 
 | Piece | Status |
 |---|---|
-| Ethereum / Bitcoin / Tron tracers | **Live** — real public block-explorer APIs, zero synthetic data. Scope: **native transfers only** (ETH/BTC/TRX), not ERC-20/TRC-20 — see §12 |
+| Ethereum / Bitcoin / Tron tracers | **Live** — real public block-explorer APIs, zero synthetic data. Scope: **native transfers only** (ETH/BTC/TRX), not ERC-20/TRC-20 — see §12. Edges are typed `TRANSFER` vs `CONTRACT_CALL`, so a zero-value contract call is never shown, counted or cited as a payment |
 | Labeled address DB, VASP registry | **Live** — real, individually source-checked public data (16 VASPs, 18 labeled addresses: 15 exchange, 2 mixer, 1 ransomware) |
 | Legal-actionability scoring | **Live** — real arithmetic over the seeded registry, score breakdown shown on screen, not a black box |
 | Confidence clustering | **Live** — real graph-structural heuristics (forward-ratio, fan-in), not AI/ML |
@@ -200,6 +200,14 @@ flowchart TD
   confidence can ever be the basis of an actual VASP recommendation** —
   medium/low surfaces for investigator attention but never drives a legal
   disclosure request on a guess.
+- **Interaction is not payment**: the tracers read *transactions*, and a
+  transaction moving no value is an interaction. Every edge is typed
+  `TRANSFER` or `CONTRACT_CALL`, and a call renders dashed with no value, is
+  counted separately from transfers, and is annotated in the disclosure
+  request's evidence trail — which drops its "received funds" ask entirely
+  when a trace found no transfer at all. The same instinct as the confidence
+  tiers: **the tool states what it actually observed, and never lets a
+  weaker fact borrow the language of a stronger one.**
 
 ---
 
