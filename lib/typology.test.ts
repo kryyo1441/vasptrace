@@ -16,6 +16,7 @@ const edge = (from: string, to: string, valueWei: string): TraceEdge => ({
   from,
   to,
   valueWei,
+  kind: valueWei === "0" ? "CONTRACT_CALL" : "TRANSFER",
   txCount: 1,
   latestTxHash: "0xhash",
   latestTimestamp: 0,

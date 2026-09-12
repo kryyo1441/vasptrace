@@ -34,12 +34,25 @@ export interface TraceNode {
   typologyFlags: TypologyFlag[];
 }
 
+// What an edge actually represents. The tracers read *transactions*, and a
+// transaction that moves no value is an interaction, not a payment — a
+// zero-value contract call renders identically to a transfer unless the two
+// are told apart. Real case that forced this: the headline demo address
+// 0x6eedf92f… reaches WazirX only via 92 zero-value calls into WazirX's
+// Gnosis Safe multisig during the July-2024 hack window, which the graph
+// used to label "0.0000 ETH · 92 tx". See ROADMAP.md item 0.
+export type TraceEdgeKind = "TRANSFER" | "CONTRACT_CALL";
+
 export interface TraceEdge {
   from: string;
   to: string;
   // Smallest base unit as a decimal string — wei (Ethereum), satoshis
   // (Bitcoin), or sun (Tron). Interpret against `TraceGraph.chain`.
   valueWei: string;
+  // Absent on Case.traceResult rows written before 2026-09-12 — read it as
+  // `=== "CONTRACT_CALL"`, never `!== "TRANSFER"`, so old traces keep
+  // rendering as transfers exactly as they did when they were generated.
+  kind: TraceEdgeKind;
   txCount: number;
   latestTxHash: string;
   latestTimestamp: number;

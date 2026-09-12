@@ -3,8 +3,10 @@
 // the report always matches exactly what was shown on screen at trace time.
 import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
+import { edgeCountLabel, isContractCall } from "@/lib/format";
 import type { Case, RiskLevel } from "@/lib/generated/prisma/client";
 import type { TraceGraph } from "@/lib/tracers/types";
+
 
 // react-pdf renders to a static, always-white page — it can't consume the
 // CSS custom properties lib/format.ts's RISK_COLOR uses for the (light/dark
@@ -90,7 +92,9 @@ export function CaseReportDocument({ kase, graph }: { kase: Case; graph: TraceGr
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>Trace depth</Text>
-            <Text style={styles.value}>{graph.maxDepth} hops · {graph.nodes.length} addresses · {graph.edges.length} transfers</Text>
+            <Text style={styles.value}>
+              {graph.maxDepth} hops · {graph.nodes.length} addresses · {edgeCountLabel(graph)}
+            </Text>
           </View>
         </View>
 
@@ -169,7 +173,9 @@ export function CaseReportDocument({ kase, graph }: { kase: Case; graph: TraceGr
           <Text style={styles.sectionTitle}>Evidence trail (transaction hashes)</Text>
           {graph.edges.map((e, i) => (
             <Text key={i} style={[styles.subtitle, styles.mono]}>
-              {e.from} {"->"} {e.to} ({e.txCount} tx): {e.latestTxHash}
+              {e.from} {"->"} {e.to} ({e.txCount} tx
+              {isContractCall(e) ? ", contract calls — no value moved" : ""}):{" "}
+              {e.latestTxHash}
             </Text>
           ))}
         </View>

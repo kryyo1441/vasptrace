@@ -104,6 +104,14 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
         from: address,
         to,
         valueWei: agg.valueBaseUnits.toString(),
+        // ponytail: classified from aggregate value alone, not from calldata
+        // — an edge that moved zero value across every one of its
+        // transactions moved no money, whatever the reason. That misnames
+        // one rare shape: a genuine zero-value native send to an EOA (no
+        // calldata) is reported as CONTRACT_CALL. To tell them apart
+        // properly, carry a hasCalldata flag on RawTransfer from each chain
+        // adapter (Etherscan exposes `input`; Bitcoin has no equivalent).
+        kind: agg.valueBaseUnits === BigInt(0) ? "CONTRACT_CALL" : "TRANSFER",
         txCount: agg.txCount,
         latestTxHash: agg.latestTxHash,
         latestTimestamp: agg.latestTimestamp,
