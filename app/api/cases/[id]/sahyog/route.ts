@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { notifyN8n } from "@/lib/n8n";
-import { LEGAL_BASIS } from "@/lib/format";
+import { evidenceTrail as buildEvidenceTrail, LEGAL_BASIS } from "@/lib/format";
 import { canAccessCase, getCurrentUser } from "@/lib/auth";
 import type { TraceGraph } from "@/lib/tracers/types";
 
@@ -28,7 +28,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
 
   const graph = kase.traceResult ? (JSON.parse(kase.traceResult) as TraceGraph) : null;
-  const evidenceTrail = graph?.edges.slice(0, 10).map((e) => e.latestTxHash) ?? [];
+  const evidenceTrail = buildEvidenceTrail(graph);
 
   const simulatedPayload = {
     caseId: kase.id,
