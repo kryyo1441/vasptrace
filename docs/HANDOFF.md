@@ -1,26 +1,37 @@
 # Handoff — pick up here
 
 Paste this to an agent (or read it yourself) to resume work. Written
-2026-09-09; **substantially rewritten 2026-09-10** after the n8n and
-deployment session.
+2026-09-09; substantially rewritten 2026-09-10 after the n8n and deployment
+session; **header and priority order rewritten 2026-09-12 — the submission
+has happened and the project is no longer deadline-bound.**
 
 ---
 
-Continue VASPtrace (SIH problem 26182), branch `day3-n8n-rehearsal`. Read
-`docs/PLAN.md`'s "Final stretch" section (near the bottom) — that's the
-authoritative priority order for what's left — and `docs/PROGRESS.md`'s most
-recent changelog entries for what already shipped.
+Continue VASPtrace (SIH problem 26182), branch `day3-n8n-rehearsal`.
 
-**SUBMISSION IS 2026-09-11 — one day out.** Realistically one or two working
-windows. What is left is *rehearsal*, not building: the timed dry-run and
-the pitch. Everything else in the plan is done. Resist adding scope.
+**THE SUBMISSION IS DONE (was 2026-09-11).** This file used to say "resist
+adding scope" and "what is left is rehearsal, not building" — that was
+correct before the deadline and is wrong now. **Phase 2 is building.**
+The authoritative priority order is **[`ROADMAP.md`](./ROADMAP.md)**, written
+2026-09-12. `PLAN.md` is the frozen 5-day brief — history, not a to-do list.
+`PROGRESS.md`'s recent changelog entries are still the record of what shipped.
 
-**STATE**: working tree clean, everything committed. Final-stretch items
-**1, 2 and 3 are all done** — auth + RBAC, n8n re-verification, and the
-small untested edges. Demo accounts: `investigator` /
-`vasptrace-investigator-2026`, `supervisor` / `vasptrace-supervisor-2026`
-(also in `README.md`). All 82 cases belong to the investigator account; the
-supervisor has 0, so both logins show 82 on the dashboard.
+**STATE**: all *tracked* files committed, but the working tree has ~9
+untracked files at the repo root (screenshots, a PDF export, `archive.zip`,
+`btc_wallets_data.csv`, `dev.db.pre-auth`, a `.pcap`). They are the user's,
+mostly unrelated to the app — leave them alone, and don't `git add -A`.
+Only two matter here: `btc_wallets_data.csv` (documented below) and
+`dev.db.pre-auth` (a pre-auth DB snapshot — do not delete).
+
+Demo accounts: `investigator` / `vasptrace-investigator-2026`, `supervisor` /
+`vasptrace-supervisor-2026` (also in `README.md`). All 82 cases belong to the
+investigator account; the supervisor has 0, so both logins show 82 on the
+dashboard.
+
+**Everything the 5-day plan asked for is done** — all 10 core items plus auth
+and RBAC. The dry-run (old item 3) and pitch rehearsal (old item 4) were the
+last deadline-bound tasks and are moot now that submission has passed; they're
+kept below only as history.
 
 **Two branches, and the difference matters:**
 
@@ -53,7 +64,13 @@ brings it back — that needs the user's password, this session can't supply
 it. Only if `uname -r` disagrees with `ls /lib/modules/` again is a reboot
 needed, and **ask first**, it's the user's machine.
 
-## Priority order
+## Priority order — SUPERSEDED, kept as history
+
+**For what to build next, read [`ROADMAP.md`](./ROADMAP.md).** The list below
+was the pre-submission priority order. It is preserved because items 0-2
+record *measurements and rejected approaches* that are still true and still
+worth not redoing — but items 3-6 are deadline-bound tasks that no longer
+apply.
 
 0. **Raise `NODE_BUDGET` (60 → ~150) — TESTED 2026-09-10, REJECTED. Don't
    redo it.** The constant stays at 60 and no code changed. The premise
@@ -121,7 +138,10 @@ needed, and **ask first**, it's the user's machine.
    error tells the user to switch the selector, but the server already knows
    the right chain via `detectChain` — the client could just switch it for
    them. Deliberately not built.
-3. **Full timed judge-facing dry-run — THE TOP PRIORITY NOW.** 2-3 times
+3. **Full timed judge-facing dry-run — MOOT (submission passed).** Was the
+   top priority on 2026-09-11. `docs/DEMO_SCRIPT.md` is still the accurate
+   runbook if the app ever needs demoing again. Original text follows.
+   2-3 times
    with different addresses: paste address → live trace → graph → n8n canvas
    → score/recommendation → PDF → Sahyog route. Time it.
 
@@ -131,19 +151,23 @@ needed, and **ask first**, it's the user's machine.
    notes referring to "the demo script" were referring to nothing. Run it
    end to end once privately, then delete the case rows it creates (the
    reset section says how, and warns which case *not* to delete).
-4. **Pitch rehearsal** — `docs/PITCH.md` is the deck source, and a
+4. **Pitch rehearsal — MOOT (submission passed).** `docs/PITCH.md` is the deck source, and a
    `VASPtrace_Pitch_Deck.pptx` already exists in the repo root (check whether
    it needs updating for the auth work, which isn't reflected in it yet).
    Rehearse the item-3 differentiation story and the n8n-as-visibility-layer
    framing.
-5. **Demo-day checklist** (not code): n8n owner-account recreation if the
+5. **Demo-day checklist — MOOT (submission passed)** (not code): n8n owner-account recreation if the
    `n8n_data` volume gets wiped, plus a fallback recording of the n8n canvas
    executing in case live n8n flakes in front of judges. The recording is
    worth more than it looks — it is also the only way the n8n story travels
    with a *deployed* link, since n8n cannot follow the app to Vercel.
 
-6. **Vercel deploy — optional, and last.** Branch `vercel-postgres`, code
-   complete, never deployed. `docs/DEPLOY.md` has the six remaining steps
+6. **Vercel deploy — still live as an option, and now entangled with phase 2.**
+   The two branches have diverged enough to break a build on switch (see the
+   gotcha below and `PROGRESS.md` 2026-09-12), and `ROADMAP.md`'s constraints
+   section says to reconcile them — or declare one dead — before any phase-2
+   schema work. That decision and this deploy are the same decision now.
+   Branch `vercel-postgres`, code complete, never deployed. `docs/DEPLOY.md` has the six remaining steps
    and is explicit about what is unverified. Roughly 90 minutes including
    the 82-row data import. **Only if the dry-run and the pitch are already
    done** — it is new scope that appears nowhere in `PLAN.md`, and three
@@ -208,6 +232,19 @@ afterwards.
 
 All logged in `PROGRESS.md`, but worth having front-of-mind:
 
+- **Branch-switch drift breaks the build, in two stages.** The demo branch is
+  SQLite and `vercel-postgres` is Postgres, and `node_modules` +
+  `lib/generated/prisma` are both gitignored, so neither follows a checkout.
+  Symptom one: `Module not found: Can't resolve '@prisma/adapter-libsql'` —
+  `node_modules` still has the *other* branch's adapter. Fix: `npm install`.
+  Then symptom two appears only after that's fixed: `The Driver Adapter
+  '@prisma/adapter-libsql', based on 'sqlite', is not compatible with the
+  provider 'postgres' specified in the Prisma schema` — that's the stale
+  *generated client*, baked for the other branch, and `prisma/schema.prisma`
+  on disk is already correct so reading it proves nothing. Fix:
+  `npx prisma generate`. **Run both after every branch switch** (hit
+  2026-09-12; the second error is the confusing one because it names a
+  provider no file on the branch mentions).
 - **Stale Turbopack modules.** The dev server can serve a stale module (a
   Prisma client that didn't pick up `prisma generate`, or a route handler
   that didn't pick up a new export from a file it imports) even though the
@@ -225,6 +262,12 @@ All logged in `PROGRESS.md`, but worth having front-of-mind:
 - **Don't kill the dev server as "cleanup"** when finishing a task — leave it
   running, the user checks the app between turns. (Stopped on request at the
   end of the 2026-09-10 session; restart with `npm run dev`.)
+- **The tracer follows native transfers only — no ERC-20, no TRC-20, no
+  USDT.** `lib/etherscan.ts:30` uses `action=txlist` (native ETH);
+  `lib/tronscan.ts:9-12` says the same for TRX in an in-code comment. Easy to
+  assume otherwise, and it has a real consequence: a suspect who moves funds
+  in USDT renders as a single node with no outgoing edges, which looks like a
+  bug or a dead address and is neither. This is `ROADMAP.md` item 1.
 - **`recommendedVaspId` holds a VASP *name*, not an id.**
   `app/api/trace/route.ts` writes `recommendation.top.vaspName` into it. The
   column is misnamed and `app/cases/page.tsx`'s `vaspName.get(...)` lookup

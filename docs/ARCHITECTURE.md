@@ -60,7 +60,23 @@ isn't the login screen, it's what a session actually authorizes:
 
 Known limitation, stated plainly: there's no audit log, no password reset,
 and no SSO. For a real deployment those matter, along with encryption at
-rest for the SQLite file. See the roadmap in [`PITCH.md`](./PITCH.md).
+rest for the SQLite file. See [`ROADMAP.md`](./ROADMAP.md).
+
+## Tracer scope — native transfers only
+
+Stated plainly because it's easy to assume otherwise: the tracer follows
+**native currency transfers only** — ETH, BTC and TRX. It does not follow
+ERC-20 or TRC-20 token transfers, so **USDT flows are invisible to it**
+(`lib/etherscan.ts` uses `action=txlist`, not `tokentx`; `lib/tronscan.ts`
+says the same for TRX in an in-code comment, and
+[`DEMO_ADDRESSES.md`](./DEMO_ADDRESSES.md) explains why the Tron demo
+addresses were picked from native deposits specifically).
+
+The consequence worth knowing before debugging: a suspect who moved funds in
+USDT renders as a single node with no outgoing edges. That looks like a bug
+or a dead address and is neither. Closing this is
+[`ROADMAP.md`](./ROADMAP.md) item 1 — ranked first because USDT-TRC20 is the
+rail most Indian investment-fraud proceeds actually move on.
 
 ## What's live vs. simulated
 

@@ -399,3 +399,21 @@ live n8n flakes in front of judges.
 Everything else out-of-scope on day 1 (bridge correlation,
 `confirmedByVaspResponse`, real Sahyog integration) stays out of scope —
 auth was the one reversal, not a general re-opening of scope.
+
+---
+
+## This plan is closed (added 2026-09-12)
+
+The submission happened on 2026-09-11. Everything above is **history**: the
+frozen 5-day brief and the schedule that delivered it, kept per this file's
+own header rule (don't edit it to reflect what got built).
+
+Phase-2 work is tracked in **[`ROADMAP.md`](./ROADMAP.md)**, not here. The
+out-of-scope calls above (bridge correlation, `confirmedByVaspResponse`) were
+correct for a 5-day build and are re-opened there on their merits — bridge
+correlation ranks 4th, the feedback loop stays parked.
+
+One correction worth carrying forward rather than leaving buried: the tracer
+this plan describes follows **native transfers only** on every chain — no
+ERC-20, no TRC-20, no USDT. That was never stated as a limitation anywhere in
+the brief or the pitch (found 2026-09-12), and it's `ROADMAP.md` item 1.

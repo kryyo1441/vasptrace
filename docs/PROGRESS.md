@@ -8,7 +8,7 @@ history.
 
 | # | Item | Status |
 |---|------|--------|
-| 1 | Multi-chain tracer | **Done** — Ethereum, Bitcoin (Blockstream), Tron (Tronscan) all live. Shared BFS engine (`lib/tracers/bfs.ts`), thin per-chain adapters. |
+| 1 | Multi-chain tracer | **Done** — Ethereum, Bitcoin (Blockstream), Tron (Tronscan) all live. Shared BFS engine (`lib/tracers/bfs.ts`), thin per-chain adapters. **Scope: native transfers only** (ETH/BTC/TRX) — no ERC-20/TRC-20/USDT; documented 2026-09-12, `ROADMAP.md` item 1. Edges carry `kind: TRANSFER \| CONTRACT_CALL` since 2026-09-12 so a zero-value contract call can't read as a payment (`ROADMAP.md` item 0). |
 | 2 | Labeled address DB | **Done** — real seed data (exchange hot wallets, Tornado Cash, OFAC SDN, one Tron exchange address). |
 | 3 | Legal-actionability scoring | **Done** — `lib/scoring.ts`, wired into the trace response, rendered on `/` and the case detail page. |
 | 4 | Confidence scoring (high/medium/low) | **Done** — `lib/clustering.ts`: medium = forwards ≥80% of value to a known exchange, low = fan-in from ≥3 senders that forwards onward. Excluded from VASP recommendation (only exact-match routes a disclosure request). |
@@ -857,22 +857,226 @@ Not done, still open: the **timed** judge-facing dry-run (a person has to
 run it with a clock — `DEMO_SCRIPT.md` is what to run), the pitch rehearsal,
 and the demo-day checklist.
 
+### 2026-09-12 — Post-submission: build break fixed, native-only gap found, roadmap opened
+
+First session after the 2026-09-11 submission. No app code changed.
+
+- **Fixed a build break caused by branch-switch drift**, in two stages. The
+  dev server failed with `Module not found: Can't resolve
+  '@prisma/adapter-libsql'` — `node_modules` held `@prisma/adapter-pg` (the
+  `vercel-postgres` branch's adapter) while `package.json` on this branch
+  asks for libsql; both `node_modules` and `lib/generated/prisma` are
+  gitignored so neither follows a checkout. `npm install` fixed that and
+  surfaced the second, more confusing one: `The Driver Adapter
+  '@prisma/adapter-libsql', based on 'sqlite', is not compatible with the
+  provider 'postgres' specified in the Prisma schema` — thrown by the stale
+  *generated client*, baked for Postgres, while `prisma/schema.prisma` on
+  disk correctly says `sqlite`. Reading the schema proves nothing here.
+  `npx prisma generate` fixed it; `next build` then passed clean (12 routes).
+  Logged as a gotcha in `HANDOFF.md` — **run both after every branch switch.**
+- **Found an undocumented capability boundary: the tracer follows native
+  transfers only.** `lib/etherscan.ts:30` uses `action=txlist` (native ETH,
+  not `tokentx`) and `lib/tronscan.ts:9-12` already said so for TRX in an
+  in-code comment — but the limitation appeared in **no** doc: not `PLAN.md`,
+  not `PITCH.md`, not `ARCHITECTURE.md`. Checked specifically for a false
+  claim and there wasn't one (the only "token" hits in those files are CSS
+  design tokens), so this was an omission rather than an error. It matters
+  because USDT-TRC20 is the dominant laundering rail in Indian
+  investment-fraud cases: a suspect who moves funds in USDT renders as a
+  single node with no outgoing edges, which reads as a bug and is not one.
+  `PITCH.md`'s real-vs-simulated table now carries the scope qualifier.
+- **Opened `docs/ROADMAP.md`** as the single post-submission engineering
+  roadmap, ranked ground-truth capability above heuristic capability. Token
+  tracing is item 1. `PITCH.md` §12 was trimmed to pitch-facing prose that
+  points at it, `PLAN.md` got a closing pointer (not a rewrite — its header
+  forbids that), and `HANDOFF.md`'s header was rewritten: it still told a
+  future reader the submission was one day out and to "resist adding scope",
+  which would have made it refuse phase-2 work outright.
+- **Reframed the approved mixer-correlation experiment before writing it
+  down.** It was proposed in-session as amount+timing correlation across a
+  mixer; on closer reading that framing is weak against Tornado Cash
+  specifically — fixed-denomination pools mean amount carries no signal, and
+  large anonymity sets crush the timing prior. Published deanonymizations
+  leaned on user error and behavioral fingerprints instead (address reuse,
+  linked funding, self-relay, gas fingerprints, multi-deposit patterns). It
+  stays on the roadmap as item 7 — last, since it's the only heuristic item —
+  with a kill criterion fixed upfront (beat the 1/k anonymity-set baseline on
+  known pairs or don't ship) and a hard constraint that a correlated link must
+  never merge into the real edge set or feed the actionability score.
+
+### 2026-09-12 (later) — Measured the tracer against a token mover; the headline demo is an interaction, not a transfer
+
+Orientation session over `docs/`. **No app code changed, nothing committed.**
+Ran `traceEthereum` directly from a throwaway `tsx` script (never
+`POST /api/trace`, per `HANDOFF.md`) and deleted it afterwards.
+
+- **The tracers follow transactions, not transfers.** Nothing filters
+  `value == 0`, so a zero-value contract call becomes a graph edge that
+  renders with a value label like a payment. A USDT mover
+  (`0x93952d09…733b6a`, depth 2) traces to **2 nodes / 1 edge**, and the edge
+  points at the **Tether contract** with `valueWei: "0"`, `txCount: 49` —
+  the real recipient never appears.
+- **So the "native transfers only" write-up from earlier today was half
+  right.** The scope claim is accurate; the *symptom* recorded against it
+  ("renders a single node and stops") holds only on Tron, which filters
+  `contractType === 1`. On Ethereum the trace draws a **phantom node** — the
+  token contract — and then expands it like a wallet. Tether returned an
+  empty `txlist` (token contracts rarely *send*), but a router or proxy in
+  that slot would spend node budget on unrelated counterparties.
+- **The headline demo address turns out to be an interaction, not a flow.**
+  `0x6eedf92f…728066` — `DEMO_ADDRESSES.md`'s "best headline demo" — has **92
+  outgoing transactions, all `value 0` with calldata** (91× `0x2d8a122e`, 1×
+  `0x48d3c273`, neither in 4byte), all into `0x27fd43ba…60c9b4`. Two things
+  make this more interesting than a bug report: `eth_getCode` shows that
+  target is the **Gnosis Safe proxy** bytecode (a multisig smart-contract
+  wallet, *not* a token contract — so the "WazirX 2" label is legitimate),
+  and all 92 calls fall between **2024-07-18 06:42 and 2024-07-22 06:53
+  UTC — the WazirX hack window.** `tokentx` for the address: 0 outgoing
+  token transfers. It moved neither ETH nor tokens outward. The graph
+  currently shows this as `0.0000 ETH · 92 tx`; "92 calls into WazirX's
+  multisig across the four days of the hack" is a better finding than the
+  one on screen, and the edge model just can't express it.
+- **Corrected two claims I had drafted wrong before they stuck:**
+  `recommendVasp` (`lib/scoring.ts:40`) takes `(nodes, vaspRegistry)` and
+  reads **no edge values at all**, so "exclude these edges from the score" is
+  a no-op — what decides the recommendation is whether the WazirX *node*
+  exists, and `bfs.ts` creates nodes inside the edge loop. And zero-value
+  edges polluting typology is **already known and mitigated**:
+  `lib/typology.ts:11-24` documents the live measurement where near-zero-value
+  contract calls cleared the old 3-destination threshold, which is why
+  `FAN_OUT_MIN_DESTINATIONS` is 5. `clustering.ts`'s ≥80% ratio is safe too
+  (zero adds nothing to `totalOut`).
+- **Left entirely unfixed, on purpose.** The three options (drop zero-value
+  edges / type them `TRANSFER` vs `CONTRACT_CALL` and keep the node / also
+  decode the calldata) differ in what the tool *claims*, and option 1 removes
+  the headline recommendation. Written up as `ROADMAP.md` **item 0**,
+  deliberately placed *outside* the 1-7 ranking since it's a semantics call,
+  with the measured before-baseline for all three ETH demo addresses.
+- **Verified `tokentx` for item 1 while there:** live on the v2 API, returning
+  `tokenSymbol` / `tokenDecimal` / `contractAddress` alongside `value`. That
+  settles item 1's open graph question — assets **cannot** be summed per
+  counterparty, since USDT is 6 decimals against ETH's 18 and
+  `lib/clustering.ts:39,45` would compare mismatched units.
+- Also noted: `traceResult` is a JSON blob, so item 1 needs **no migration** —
+  the two-branch schema constraint in `ROADMAP.md` does not gate it.
+- Unrelated, observed not acted on: the `Case` table is at **83** rows, not
+  the 82 `HANDOFF.md` documents. The extra row is a Bitcoin trace from
+  2026-09-12 07:29Z on the investigator account, created before this session
+  (this session persisted nothing). Left alone, and `HANDOFF.md` left alone —
+  it's the user's own row and their own warning to amend.
+
+### 2026-09-12 (later still) — Shipped ROADMAP item 0: edges now say whether value moved
+
+Option 2 of the three written up earlier the same day. **The fix was chosen
+for preserving every measured baseline**, and it does.
+
+- **`TraceEdgeKind = "TRANSFER" | "CONTRACT_CALL"`** on `TraceEdge`, set in
+  `lib/tracers/bfs.ts` from whether the edge's *aggregate* value is zero.
+  Classifying from aggregate value rather than calldata is a marked
+  `ponytail:` shortcut — it misnames exactly one shape (a real zero-value
+  native send to an EOA) and the comment names the upgrade path (a
+  `hasCalldata` flag on `RawTransfer`; Etherscan exposes `input`, Bitcoin has
+  no equivalent).
+- **`isContractCall` / `edgeAmountLabel` went into `lib/format.ts`**, not the
+  graph component — the canvas and the PDF both consume them, and that file
+  already exists to stop exactly this kind of drift (its `LEGAL_BASIS`
+  comment says so). `formatValue` / `CHAIN_UNIT` moved along with them, out
+  of `components/graph-view.tsx`, which also made them testable at all: the
+  component pulls in `next/dynamic` and can't be imported by a bare `tsx`
+  script.
+- **Canvas:** contract-call edges are dashed, thinner, muted violet, and get
+  **zero directional particles** — the particles animate value in motion,
+  which is precisely the wrong story for an edge that moved none. New legend
+  key "Contract call (no value)", rendered only when the trace has one.
+- **PDF:** the summary line called every edge a transfer. The headline
+  address's report now reads `3 hops · 2 addresses · 0 transfers · 1
+  contract-call link (no value)`, and its evidence trail marks the row
+  `contract calls — no value moved`. Checked with `pdftotext`, including the
+  `1 link` vs `1 links` pluralization, since this is a legal-facing document.
+- **Back-compat treated as a contract.** All 83 stored `Case.traceResult`
+  blobs predate the field, so every read tests `=== "CONTRACT_CALL"` and
+  never `!== "TRANSFER"`; old cases render as transfers exactly as they did
+  when generated. Asserted in `lib/format.test.ts` with a `kind`-less edge.
+- **Verified live, and every baseline held.** Node counts, edge counts,
+  recommendations, root confidences and typology flags identical to the
+  pre-change measurements on all four probe addresses. The headline demo
+  still recommends WazirX — `recommendVasp` reads nodes, and the node stayed
+  — but its edge now reads `92 contract calls · no value moved` instead of
+  `0.0000 ETH · 92 tx`. The USDT mover reads `49 contract calls · no value
+  moved`. Bonus finding: the **Binance** demo address had a phantom Tether
+  edge of its own (2 zero-value calls), now typed as one.
+- **Fixed a precision bug the move exposed.** `formatValue` did
+  `Number(BigInt(wei)) / 10 ** decimals` then `.toFixed(4)`, which rendered a
+  1-wei transfer as `0.0000 ETH` — the exact string this change set out to
+  remove, but on a `TRANSFER` edge, where no dashed line or legend key exists
+  to explain it. It also overflowed `Number`'s 2^53 ceiling above ~0.009 ETH,
+  so the 4-dp figure was rounded off an already-lossy number. Now scaled in
+  BigInt, with a `< 0.0001 ETH` branch for dust; exactly zero still prints
+  `0.0000` so pre-2026-09-12 stored cases render as they always did. Asserted
+  for dust, legacy zero, and a 123456.789 ETH / 21M BTC overflow case.
+- **Then grepped every other edge consumer, and found the fix had missed the
+  one that matters most: the legal output path.** Patching the canvas and the
+  PDF left three places still treating a contract call as a transfer:
+  - `app/page.tsx` and `app/cases/[id]/page.tsx` both printed
+    `{graph.edges.length} transfers`. The headline demo's own page therefore
+    said "1 transfers" when the honest answer is zero.
+  - **`app/api/cases/[id]/sahyog/route.ts` built the disclosure request's
+    `evidenceTrail` from every edge's `latestTxHash`, unmarked** — and
+    `components/sahyog-button.tsx`'s email draft asks the VASP about "any
+    address that **received funds** traced from it, per the evidence trail
+    below". For the headline address every hash in that trail is a zero-value
+    contract call, so the drafted request asserted a fund movement that never
+    happened, in a document drafted under `LEGAL_BASIS`. That is the worst
+    place in the app for this bug and the first pass walked straight past it.
+  - The trail was also built twice, identically, in the route and the page —
+    the page's own comment admitted it was "mirroring" the route.
+- **Fixed at the shared root**, in `lib/format.ts`: `evidenceTrail(graph)`
+  (transfers first so truncation at 10 can never drop a real transfer for a
+  call; call hashes annotated `(contract call — no value moved)`),
+  `hasValueTransfer(graph)`, and `edgeCountLabel(graph)` — now the single
+  source for `/`, `/cases/[id]` **and** the PDF, which dropped its own local
+  copies. The email draft takes a `valueMoved` prop and swaps its whole ask:
+  with no transfers it says "The trace recorded no value transfers from this
+  address. The evidence below is on-chain contract interactions with your
+  platform, not incoming funds." Verified live through
+  `POST /api/cases/[id]/sahyog` — the routed payload's trail is the annotated
+  single hash, and the case page reads `0 transfers, 1 contract-call link (no
+  value)`.
+- Checks: new `lib/format.test.ts` (`npx tsx lib/format.test.ts`); all five
+  existing self-checks still pass; `tsc --noEmit` and `eslint` clean;
+  `next build` clean at 12 routes. Full-stack verified through
+  `POST /api/trace` → case page DOM → PDF, and **the test case row that
+  created was deleted** (`Case` count back to 83).
+- **Browser verification was not possible** — the Claude-in-Chrome extension
+  isn't connected in this session, so the dashed-violet edge and the legend
+  key were confirmed in the server-rendered DOM and the PDF, not visually on
+  the canvas. Worth one look on the next session that has a browser.
+- Left alone on purpose: contract-call edges still count toward
+  `outgoing.length` and can still inflate FAN_OUT at its threshold of 5. That
+  is pre-existing and already mitigated (`lib/typology.ts:11-24`), and
+  changing it would alter flag output on stored cases — a different decision
+  from how an edge is labelled.
+
 ## Next up
 
-All ten original plan items have a first pass and the app is demo-ready
-end to end. Real submission deadline is **2026-09-11 — one day out** (the
-"~4 working windows" figure written on 2026-09-09 is stale by a day; treat
-one or two windows as the real budget). See `PLAN.md`'s "Final stretch"
-section (right after the old "Day 5 — Buffer + pitch" stub, which it
-supersedes) for the authoritative priority order.
+**Updated 2026-09-12 — the submission has happened.** All ten original plan
+items shipped, plus auth and RBAC, and the app is demo-ready end to end.
+Phase-2 priority order now lives in **[`ROADMAP.md`](./ROADMAP.md)**, ranked
+ground-truth capability first: token/stablecoin tracing (the tracer is
+native-only today, item 1), Bitcoin entity clustering, issuer freeze paths,
+bridge traversal, live label sync, monitoring, and the mixer-demixing
+experiment last as the one heuristic item.
 
-**Final-stretch items 1, 2 and 3 are all done.** Auth + RBAC (item 1), n8n
-re-verification including the ack routes through the proxy gate (item 2,
-done 2026-09-10 — see the entry below), and the small untested edges (item
-3, done 2026-09-10). **What is actually left: the timed judge-facing
-dry-run, the pitch rehearsal (item 4), and the demo-day checklist (item
-5).** `docs/DEMO_SCRIPT.md` now exists as the runbook for the first of
-those.
+Two constraints gate most of it, both written up in `ROADMAP.md`: the two
+branches have diverged enough to break a build on switch, so schema work
+costs two migrations until that's reconciled; and extra per-node API calls
+fight `withPacing`, which already makes a deep trace ~25s.
+
+The remaining pre-submission tasks below (timed dry-run, pitch rehearsal,
+demo-day checklist) are **moot** — kept as history. `docs/DEMO_SCRIPT.md` is
+still accurate if the app ever needs demoing again.
+
+Everything from here down is the pre-submission record.
 
 Separately, and **not** part of the plan: a Vercel deploy exists on the
 `vercel-postgres` branch (Prisma Postgres, code complete, never deployed —

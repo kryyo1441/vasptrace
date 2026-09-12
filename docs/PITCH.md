@@ -140,7 +140,7 @@ project convention, enforced from day one.
 
 | Piece | Status |
 |---|---|
-| Ethereum / Bitcoin / Tron tracers | **Live** — real public block-explorer APIs, zero synthetic data |
+| Ethereum / Bitcoin / Tron tracers | **Live** — real public block-explorer APIs, zero synthetic data. Scope: **native transfers only** (ETH/BTC/TRX), not ERC-20/TRC-20 — see §12 |
 | Labeled address DB, VASP registry | **Live** — real, individually source-checked public data (16 VASPs, 18 labeled addresses: 15 exchange, 2 mixer, 1 ransomware) |
 | Legal-actionability scoring | **Live** — real arithmetic over the seeded registry, score breakdown shown on screen, not a black box |
 | Confidence clustering | **Live** — real graph-structural heuristics (forward-ratio, fan-in), not AI/ML |
@@ -376,13 +376,28 @@ not just that it works.
 ## 12. Roadmap — what's next
 
 Deliberately out of scope for a 5-day build, kept as credible next steps
-rather than vague hand-waving:
+rather than vague hand-waving. **The engineering detail, ranked with
+verification notes, lives in [`ROADMAP.md`](./ROADMAP.md)** — this section is
+the short pitch-facing version of it.
 
+- **Token and stablecoin tracing** — the tracer currently follows native
+  transfers only (ETH, BTC, TRX), not ERC-20/TRC-20. Since USDT-TRC20 is the
+  rail most Indian investment-fraud proceeds actually move on, this is the
+  single biggest capability gap and the top of the roadmap.
+- **Issuer freeze paths** — stablecoin issuers freeze addresses at
+  law-enforcement request, so for USDT flows the actionable party may be the
+  issuer rather than the exchange. This is the same legal-actionability
+  question §3 already answers for VASPs, applied one layer further.
+- **Bitcoin entity clustering** — common-input-ownership, so labels resolve
+  to wallets rather than single addresses.
+- **Cross-chain bridge correlation** — following a suspect's funds across a
+  bridge from one chain to another, not just within a single chain.
 - **Real Sahyog/I4C API integration**, once one is publicly available —
   the mock payload is already shaped to match what that integration would
   need.
-- **Cross-chain bridge correlation** — following a suspect's funds across a
-  bridge from one chain to another, not just within a single chain.
+- **Address monitoring and alerts** — today's trace is retrospective; an
+  alert when funds reach an exchange deposit address is actionable while the
+  money is still there.
 - **ML-assisted typology detection** as a second opinion alongside the
   current rule-based heuristics, kept explicitly separate and labeled so
   the transparency story doesn't regress.

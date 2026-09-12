@@ -20,6 +20,21 @@ Day 2 note about a live-API fallback for that scenario.
 | `0x82c705d7b532316e5b767df60d3be151b670aa1a` | Coinbase 1 (Coinbase) | root inferred medium, exchange node high |
 | `0x6eedf92fb92dd68a270c3205e96dccc527728066` | WazirX 2 (WazirX) | **best headline demo** — WazirX is FIU-IND registered + has an India nodal officer, highest recommendation score (8) of any seed VASP; this address is dormant since 2024-07 so it will not drift |
 
+**What this address actually shows, corrected 2026-09-12.** Its link to
+WazirX is **not a transfer.** All 92 of its outgoing transactions are
+zero-value calls with calldata into `0x27fd43ba…60c9b4`, which `eth_getCode`
+confirms is a **Gnosis Safe proxy** — WazirX's multisig — and every one lands
+between 2024-07-18 and 2024-07-22, the WazirX hack window. It has **no**
+outgoing token transfers either, so it moved neither ETH nor tokens.
+
+The graph used to label that edge `0.0000 ETH · 92 tx`. Since `ROADMAP.md`
+item 0 shipped it reads **`92 contract calls · no value moved`**, drawn as a
+dashed violet edge with a legend key. The WazirX recommendation is unchanged
+(it comes from the labeled *node*, not the edge value), so the demo still
+works end to end — and "92 calls into WazirX's multisig across the four days
+of the hack" is a stronger thing to say out loud than a zero-value transfer
+was. Say that, not "funds moved to WazirX".
+
 ## Bitcoin (Blockstream Esplora)
 
 | Address | Hits | Confidence chain |
@@ -60,4 +75,5 @@ showing what a *realistic* multi-hop trace looks like.
 Native-TRX-only tracer (see `lib/tronscan.ts`), so these were picked from
 Bitfinex's recent *native TRX* deposits specifically — most Tron flow into
 big exchanges is USDT (TRC20), which isn't traced (out of scope, noted in
-`lib/tronscan.ts`).
+`lib/tronscan.ts`; closing it is [`ROADMAP.md`](./ROADMAP.md) item 1 — if it
+lands, this table can be rebuilt from the far larger USDT deposit flow).
