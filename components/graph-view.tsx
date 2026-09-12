@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { TraceGraph, TraceNode, TypologyFlag } from "@/lib/tracers/types";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
+import { edgeAmountLabel, isContractCall } from "@/lib/format";
 import {
   Sheet,
   SheetContent,
@@ -12,7 +13,6 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import type { Chain } from "@/lib/generated/prisma/client";
 import { AlertTriangle, ShieldCheck } from "lucide-react";
 
 // react-force-graph-2d touches window/canvas at import time — must load client-only.
@@ -46,6 +46,11 @@ const NODE_KIND_LABEL: Record<TraceNode["kind"], string> = {
   UNKNOWN: "Unknown",
 };
 
+// Contract-call edges: deliberately the dimmest thing on the canvas. They
+// are real observations but not value flow, so they must not compete with
+// the money path for attention (ROADMAP.md item 0).
+const CONTRACT_CALL_COLOR = "#a78bfa"; // muted violet
+
 // Distinct from NODE_COLOR so a flagged edge reads as its own signal even
 // when it touches an already-colored node (e.g. an edge into a mixer).
 const FLAG_COLOR: Record<TypologyFlag, string> = {
@@ -58,24 +63,10 @@ function short(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-// TraceEdge.valueWei is the smallest base unit for whichever chain the
-// trace ran on (wei / satoshis / sun) — divisor+symbol keyed off it here
-// rather than renaming the field across every file that touches it.
-const CHAIN_UNIT: Record<Chain, { symbol: string; decimals: number }> = {
-  ETHEREUM: { symbol: "ETH", decimals: 18 },
-  BITCOIN: { symbol: "BTC", decimals: 8 },
-  TRON: { symbol: "TRX", decimals: 6 },
-};
-
-function formatValue(baseUnits: string, chain: Chain) {
-  const { symbol, decimals } = CHAIN_UNIT[chain];
-  return `${(Number(BigInt(baseUnits)) / 10 ** decimals).toFixed(4)} ${symbol}`;
-}
-
 // react-force-graph-2d's node/link callback types don't survive next/dynamic's
 // generic erasure, so callbacks below are typed loosely and cast at use sites.
 type GraphNode = TraceNode & { id: string; x: number; y: number };
-type GraphLink = { source: string; target: string; label: string; flags: TypologyFlag[] };
+type GraphLink = { source: string; target: string; label: string; flags: TypologyFlag[]; isCall: boolean };
 
 // Radial layout (rings by hop depth) as the starting position for each
 // node — depth is instantly readable, and it gives d3-force a sane starting
@@ -130,10 +121,11 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
       source: e.from,
       target: e.to,
       label: [
-        `${formatValue(e.valueWei, graph.chain)} · ${e.txCount} tx · ${new Date(e.latestTimestamp * 1000).toLocaleDateString()}`,
+        `${edgeAmountLabel(e, graph.chain)} · ${new Date(e.latestTimestamp * 1000).toLocaleDateString()}`,
         ...e.typologyFlags.map((f) => TYPOLOGY_LABEL[f]),
       ].join(" — "),
       flags: e.typologyFlags,
+      isCall: isContractCall(e),
     }));
 
     return { nodes, links };
@@ -163,6 +155,8 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
     const seen = new Set(graph.nodes.map((n) => n.kind));
     return order.filter((k) => seen.has(k));
   }, [graph.nodes]);
+
+  const hasContractCall = useMemo(() => graph.edges.some(isContractCall), [graph.edges]);
 
   // Pixel radius for a node — shared between the paint callback and the
   // pointer hit-area so clicks land exactly where the circle is drawn.
@@ -293,15 +287,27 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
           return node.typologyFlags.length > 0 ? 2.2 : 1.5;
         }}
         linkLabel={(l) => (l as unknown as GraphLink).label}
-        linkWidth={(l) => ((l as unknown as GraphLink).flags.length > 0 ? 3 : 1.5)}
+        linkWidth={(l) => {
+          const link = l as unknown as GraphLink;
+          if (link.isCall) return 1;
+          return link.flags.length > 0 ? 3 : 1.5;
+        }}
+        // Dashed + dimmer + no flow particles: the particles read as value
+        // in motion, which is the exact wrong story for a zero-value call.
+        linkLineDash={(l) => ((l as unknown as GraphLink).isCall ? [4, 4] : null)}
         linkColor={(l) => {
-          const flags = (l as unknown as GraphLink).flags;
-          return flags.length > 0 ? FLAG_COLOR[flags[0]] : "#9ca3af";
+          const link = l as unknown as GraphLink;
+          if (link.flags.length > 0) return FLAG_COLOR[link.flags[0]];
+          return link.isCall ? CONTRACT_CALL_COLOR : "#9ca3af";
         }}
         linkCurvature={0.2}
         linkDirectionalArrowLength={5}
         linkDirectionalArrowRelPos={1}
-        linkDirectionalParticles={(l) => ((l as unknown as GraphLink).flags.length > 0 ? 3 : 2)}
+        linkDirectionalParticles={(l) => {
+          const link = l as unknown as GraphLink;
+          if (link.isCall) return 0;
+          return link.flags.length > 0 ? 3 : 2;
+        }}
         linkDirectionalParticleWidth={2}
         linkDirectionalParticleSpeed={0.004}
         onNodeClick={(n) => setSelected(n as GraphNode)}
@@ -318,6 +324,18 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
             {NODE_KIND_LABEL[k]}
           </span>
         ))}
+        {/* Only when this trace actually has one — a dashed-line key on a
+            graph with no contract-call edges is noise, same rule as the
+            node kinds above. */}
+        {hasContractCall && (
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="h-0 w-4 shrink-0 border-t-2 border-dashed"
+              style={{ borderColor: CONTRACT_CALL_COLOR }}
+            />
+            Contract call (no value)
+          </span>
+        )}
       </div>
 
       <Sheet open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>

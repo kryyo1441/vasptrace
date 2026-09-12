@@ -13,12 +13,18 @@ function buildEmailDraft({
   address,
   chain,
   evidenceTrail,
+  valueMoved,
 }: {
   caseId: string;
   vaspName: string;
   address: string;
   chain: Chain;
   evidenceTrail: string[];
+  // False when the trace found no value transfer at all — the headline demo
+  // address is like this: 92 zero-value calls into WazirX's multisig and not
+  // a wei moved. The draft then must not ask about "funds received", because
+  // none were. See ROADMAP.md item 0.
+  valueMoved: boolean;
 }) {
   const subject = `Disclosure Request — Case ${caseId} — ${vaspName}`;
   const body = `To: ${vaspName} Compliance / Legal Team
@@ -30,9 +36,16 @@ Suspect address: ${address}
 Chain: ${CHAIN_LABEL[chain]}
 Case reference: ${caseId}
 
-We request account-holder KYC details and transaction records associated
+${
+    valueMoved
+      ? `We request account-holder KYC details and transaction records associated
 with the above address, or any address that received funds traced from it,
-per the evidence trail below.
+per the evidence trail below.`
+      : `The trace recorded no value transfers from this address. The evidence below
+is on-chain contract interactions with your platform, not incoming funds. We
+request account-holder KYC details and any records associated with these
+interactions, and with the address above.`
+  }
 
 Evidence trail (transaction hashes):
 ${evidenceTrail.length > 0 ? evidenceTrail.map((h) => `- ${h}`).join("\n") : "(no evidence hashes recorded for this trace)"}
@@ -52,6 +65,7 @@ export function SahyogButton({
   address,
   chain,
   evidenceTrail,
+  valueMoved,
 }: {
   caseId: string;
   vaspName: string;
@@ -59,6 +73,7 @@ export function SahyogButton({
   address: string;
   chain: Chain;
   evidenceTrail: string[];
+  valueMoved: boolean;
 }) {
   const [loading, setLoading] = useState(false);
   const [payload, setPayload] = useState<unknown>(null);
@@ -86,7 +101,7 @@ export function SahyogButton({
   }
 
   async function copyEmailDraft() {
-    const { subject, body } = buildEmailDraft({ caseId, vaspName, address, chain, evidenceTrail });
+    const { subject, body } = buildEmailDraft({ caseId, vaspName, address, chain, evidenceTrail, valueMoved });
     try {
       await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`);
       setCopied(true);
