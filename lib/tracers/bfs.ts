@@ -44,6 +44,16 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
   const edges: TraceEdge[] = [];
   const warnings: string[] = [];
 
+  // Arbitrum ships with no seeded labels (nothing there could be verified —
+  // see prisma/seed.ts). Without this, its "No labeled VASP reached" state
+  // reads as "the funds never touched an exchange" when the truth is "we
+  // can't recognise one on this chain".
+  if (labels.length === 0) {
+    warnings.push(
+      `No labeled addresses are seeded for ${adapter.chain} yet — this trace can't recognise an exchange or mixer, so "no VASP reached" doesn't mean none was.`
+    );
+  }
+
   nodes.set(root, {
     address: root,
     depth: 0,
