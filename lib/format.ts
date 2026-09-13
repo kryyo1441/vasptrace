@@ -1,7 +1,13 @@
 import type { TraceEdge, TraceGraph, VaspRecommendation } from "@/lib/tracers/types";
 import type { Chain, RiskLevel } from "@/lib/generated/prisma/client";
 
-export const CHAIN_LABEL: Record<Chain, string> = { ETHEREUM: "Ethereum", BITCOIN: "Bitcoin", TRON: "Tron" };
+export const CHAIN_LABEL: Record<Chain, string> = {
+  ETHEREUM: "Ethereum",
+  POLYGON: "Polygon",
+  ARBITRUM: "Arbitrum",
+  BITCOIN: "Bitcoin",
+  TRON: "Tron",
+};
 
 // Shared with app/api/cases/[id]/sahyog/route.ts's simulated payload — kept
 // in one place so the disclosure email draft (components/sahyog-button.tsx)
@@ -37,6 +43,8 @@ export function vaspLine(rec: VaspRecommendation) {
 // across every file that touches it.
 const CHAIN_UNIT: Record<Chain, { symbol: string; decimals: number }> = {
   ETHEREUM: { symbol: "ETH", decimals: 18 },
+  POLYGON: { symbol: "POL", decimals: 18 }, // formerly MATIC
+  ARBITRUM: { symbol: "ETH", decimals: 18 }, // Arbitrum's native gas coin is ETH
   BITCOIN: { symbol: "BTC", decimals: 8 },
   TRON: { symbol: "TRX", decimals: 6 },
 };
