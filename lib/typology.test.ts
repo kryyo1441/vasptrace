@@ -76,4 +76,25 @@ const edge = (from: string, to: string, valueWei: string): TraceEdge => ({
   assert.deepEqual(nodes[1].typologyFlags, []);
 }
 
+// Token edges: a 10x ratio between wei and USDT base units is meaningless, so
+// two legs in different assets are not a peel chain.
+{
+  const usdt = { symbol: "USDT", decimals: 6, contract: "0xusdt" };
+  const nodes = [node("a", 0), node("b", 1), node("c", 1)];
+  const edges = [edge("a", "b", "1000"), { ...edge("a", "c", "100"), asset: usdt }];
+  applyTypologyFlags(nodes, edges);
+  assert.deepEqual(nodes[0].typologyFlags, []);
+}
+
+// FAN_OUT counts destinations, not edges: paying 3 addresses in both ETH and
+// USDT is 6 edges but still 3 destinations.
+{
+  const usdt = { symbol: "USDT", decimals: 6, contract: "0xusdt" };
+  const dests = ["b", "c", "d"];
+  const nodes = [node("a", 0), ...dests.map((d) => node(d, 1))];
+  const edges = dests.flatMap((d) => [edge("a", d, "1"), { ...edge("a", d, "1"), asset: usdt }]);
+  applyTypologyFlags(nodes, edges);
+  assert.deepEqual(nodes[0].typologyFlags, []);
+}
+
 console.log("typology self-check passed");

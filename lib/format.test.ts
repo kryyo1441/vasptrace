@@ -52,6 +52,18 @@ const edge = (overrides: Partial<TraceEdge> = {}): TraceEdge => ({
   assert.equal(edgeAmountLabel(legacy, "BITCOIN"), "5.0000 BTC · 2 tx");
 }
 
+// A token edge is labelled in its own asset's units, not the chain's — the
+// same 1,411.608923 USDT read against TRX's 6 decimals happens to coincide,
+// but against ETH's 18 it would print dust. And an edge with no `asset` (every
+// case stored before token tracing) still reads as the native currency.
+{
+  const usdt = { symbol: "USDT", decimals: 6, contract: "0xdac17f958d2ee523a2206206994597c13d831ec7" };
+  assert.equal(edgeAmountLabel(edge({ valueWei: "1411608923", asset: usdt }), "ETHEREUM"), "1411.6089 USDT · 1 tx");
+  assert.equal(edgeAmountLabel(edge({ valueWei: "1411608923", asset: usdt }), "TRON"), "1411.6089 USDT · 1 tx");
+  const legacy = { from: "T1", to: "T2", valueWei: "1000000", txCount: 1 } as unknown as TraceEdge;
+  assert.equal(edgeAmountLabel(legacy, "TRON"), "1.0000 TRX · 1 tx");
+}
+
 // Per-chain base units still resolve off the chain, not the field name.
 {
   assert.equal(edgeAmountLabel(edge({ valueWei: "100000000" }), "BITCOIN"), "1.0000 BTC · 1 tx");

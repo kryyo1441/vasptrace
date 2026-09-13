@@ -45,10 +45,16 @@ export function applyTypologyFlags(nodes: TraceNode[], edges: TraceEdge[]): void
   for (const node of nodes) {
     const outgoing = outgoingByAddress.get(node.address) ?? [];
 
-    if (outgoing.length >= FAN_OUT_MIN_DESTINATIONS) {
+    // Destinations, not edges: edges are per destination *per asset*, so an
+    // address paid in both TRX and USDT is still one destination. Identical
+    // to the edge count on a native-only trace.
+    const destinations = new Set(outgoing.map((e) => e.to)).size;
+
+    if (destinations >= FAN_OUT_MIN_DESTINATIONS) {
       addFlag(node, "FAN_OUT");
       for (const edge of outgoing) addFlag(edge, "FAN_OUT");
-    } else if (outgoing.length === 2) {
+    } else if (outgoing.length === 2 && (outgoing[0].asset?.contract ?? "") === (outgoing[1].asset?.contract ?? "")) {
+      // Same asset only — a 4x ratio between wei and USDT units means nothing.
       const [v1, v2] = outgoing.map((e) => BigInt(e.valueWei));
       const [big, small] = v1 >= v2 ? [v1, v2] : [v2, v1];
       if (small > BigInt(0) && big >= small * PEEL_CHAIN_RATIO) {

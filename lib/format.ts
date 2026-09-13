@@ -31,9 +31,10 @@ export function vaspLine(rec: VaspRecommendation) {
   }/5 · score ${b.score}`;
 }
 
-// TraceEdge.valueWei is the smallest base unit for whichever chain the
-// trace ran on (wei / satoshis / sun) — divisor+symbol keyed off it here
-// rather than renaming the field across every file that touches it.
+// TraceEdge.valueWei is the smallest base unit of the edge's `asset` when it
+// has one (USDT, USDC), else of the chain's native currency (wei / satoshis /
+// sun) — divisor+symbol keyed off it here rather than renaming the field
+// across every file that touches it.
 const CHAIN_UNIT: Record<Chain, { symbol: string; decimals: number }> = {
   ETHEREUM: { symbol: "ETH", decimals: 18 },
   BITCOIN: { symbol: "BTC", decimals: 8 },
@@ -53,8 +54,7 @@ const DISPLAY_DP = 4;
 // must not read alike. Exactly zero still prints "0.0000" so the
 // pre-2026-09-12 stored cases (no `kind`, so rendered as transfers) look
 // exactly as they did when they were generated.
-function formatValue(baseUnits: string, chain: Chain) {
-  const { symbol, decimals } = CHAIN_UNIT[chain];
+function formatValue(baseUnits: string, { symbol, decimals }: { symbol: string; decimals: number }) {
   const value = BigInt(baseUnits);
   const perUnit = BigInt(10) ** BigInt(decimals);
   const steps = BigInt(10) ** BigInt(DISPLAY_DP);
@@ -73,9 +73,9 @@ export function isContractCall(edge: Pick<TraceEdge, "kind">) {
 // A contract call moved no value, so a value is the one thing its label must
 // not lead with — "0.0000 ETH" reads as "a payment of nothing" when the
 // honest reading is "not a payment". See ROADMAP.md item 0.
-export function edgeAmountLabel(edge: Pick<TraceEdge, "kind" | "valueWei" | "txCount">, chain: Chain) {
+export function edgeAmountLabel(edge: Pick<TraceEdge, "kind" | "valueWei" | "txCount" | "asset">, chain: Chain) {
   const calls = `${edge.txCount} contract call${edge.txCount === 1 ? "" : "s"} · no value moved`;
-  return isContractCall(edge) ? calls : `${formatValue(edge.valueWei, chain)} · ${edge.txCount} tx`;
+  return isContractCall(edge) ? calls : `${formatValue(edge.valueWei, edge.asset ?? CHAIN_UNIT[chain])} · ${edge.txCount} tx`;
 }
 
 const EVIDENCE_TRAIL_LIMIT = 10;

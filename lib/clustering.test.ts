@@ -65,4 +65,20 @@ const edge = (from: string, to: string, valueWei: string): TraceEdge => ({
   assert.equal(labeled.entityName, "Tornado Cash");
 }
 
+// Share is per asset. All of this address's USDT goes to the exchange, while
+// 1 ETH goes elsewhere. Summed in raw base units the 100 USDT (1e8) is ~0% of
+// 1e18 wei and the deposit address is missed — the exact bug grouping fixes.
+{
+  const usdt = { symbol: "USDT", decimals: 6, contract: "0xusdt" };
+  const exchange = node("0xexchange3", { kind: "EXCHANGE", confidence: "high", entityName: "Binance 14" });
+  const deposit = node("0xdeposit3");
+  const edges = [
+    edge("0xdeposit3", "0xother", "1000000000000000000"),
+    { ...edge("0xdeposit3", "0xexchange3", "100000000"), asset: usdt },
+  ];
+  applyConfidenceClustering([exchange, deposit], edges);
+  assert.equal(deposit.confidence, "medium");
+  assert.match(deposit.confidenceReason!, /100% of its outgoing USDT/);
+}
+
 console.log("clustering self-check passed");

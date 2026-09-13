@@ -36,19 +36,26 @@ export function applyConfidenceClustering(nodes: TraceNode[], edges: TraceEdge[]
     if (node.confidence) continue; // already an exact match, don't override
 
     const outgoing = outgoingByAddress.get(node.address) ?? [];
-    const totalOut = outgoing.reduce((sum, e) => sum + BigInt(e.valueWei), BigInt(0));
+    // Share is taken within one asset: summing 6-decimal USDT with 18-decimal
+    // wei would make any token edge's share round to 0%. A native-only node
+    // has one group, so this is the old single total.
+    const totalOutByAsset = new Map<string, bigint>();
+    for (const e of outgoing) {
+      const k = e.asset?.contract ?? "";
+      totalOutByAsset.set(k, (totalOutByAsset.get(k) ?? BigInt(0)) + BigInt(e.valueWei));
+    }
 
-    if (totalOut > BigInt(0)) {
-      for (const edge of outgoing) {
-        const dest = byAddress.get(edge.to);
-        if (!dest || dest.kind !== "EXCHANGE" || dest.confidence !== "high" || !dest.entityName) continue;
-        const shareBps = Number((BigInt(edge.valueWei) * BigInt(10000)) / totalOut);
-        if (shareBps / 10000 >= MEDIUM_FORWARD_RATIO) {
-          node.confidence = "medium";
-          node.entityName = `${dest.entityName} (inferred deposit address)`;
-          node.confidenceReason = `Forwards ${(shareBps / 100).toFixed(0)}% of its outgoing value to a known ${dest.entityName} address`;
-          break;
-        }
+    for (const edge of outgoing) {
+      const totalOut = totalOutByAsset.get(edge.asset?.contract ?? "")!;
+      if (totalOut === BigInt(0)) continue;
+      const dest = byAddress.get(edge.to);
+      if (!dest || dest.kind !== "EXCHANGE" || dest.confidence !== "high" || !dest.entityName) continue;
+      const shareBps = Number((BigInt(edge.valueWei) * BigInt(10000)) / totalOut);
+      if (shareBps / 10000 >= MEDIUM_FORWARD_RATIO) {
+        node.confidence = "medium";
+        node.entityName = `${dest.entityName} (inferred deposit address)`;
+        node.confidenceReason = `Forwards ${(shareBps / 100).toFixed(0)}% of its outgoing ${edge.asset?.symbol ?? "native-currency value"} to a known ${dest.entityName} address`;
+        break;
       }
     }
 
