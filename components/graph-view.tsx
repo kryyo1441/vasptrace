@@ -66,7 +66,7 @@ function short(address: string) {
 // react-force-graph-2d's node/link callback types don't survive next/dynamic's
 // generic erasure, so callbacks below are typed loosely and cast at use sites.
 type GraphNode = TraceNode & { id: string; x: number; y: number };
-type GraphLink = { source: string; target: string; label: string; flags: TypologyFlag[]; isCall: boolean };
+type GraphLink = { source: string; target: string; label: string; flags: TypologyFlag[]; isCall: boolean; curvature: number };
 
 // Radial layout (rings by hop depth) as the starting position for each
 // node — depth is instantly readable, and it gives d3-force a sane starting
@@ -117,16 +117,27 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
       };
     });
 
-    const links = graph.edges.map((e) => ({
-      source: e.from,
-      target: e.to,
-      label: [
-        `${edgeAmountLabel(e, graph.chain)} · ${new Date(e.latestTimestamp * 1000).toLocaleDateString()}`,
-        ...e.typologyFlags.map((f) => TYPOLOGY_LABEL[f]),
-      ].join(" — "),
-      flags: e.typologyFlags,
-      isCall: isContractCall(e),
-    }));
+    // Edges are per destination *per asset*, so ETH and USDT to one address
+    // are two links between the same pair. At one shared curvature they draw
+    // exactly on top of each other and only one hover label is reachable —
+    // bow each extra parallel link out further.
+    const parallelCount = new Map<string, number>();
+    const links = graph.edges.map((e) => {
+      const pair = `${e.from}|${e.to}`;
+      const i = parallelCount.get(pair) ?? 0;
+      parallelCount.set(pair, i + 1);
+      return {
+        source: e.from,
+        target: e.to,
+        label: [
+          `${edgeAmountLabel(e, graph.chain)} · ${new Date(e.latestTimestamp * 1000).toLocaleDateString()}`,
+          ...e.typologyFlags.map((f) => TYPOLOGY_LABEL[f]),
+        ].join(" — "),
+        flags: e.typologyFlags,
+        isCall: isContractCall(e),
+        curvature: 0.2 + i * 0.35,
+      };
+    });
 
     return { nodes, links };
   }, [graph]);
@@ -300,7 +311,7 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
           if (link.flags.length > 0) return FLAG_COLOR[link.flags[0]];
           return link.isCall ? CONTRACT_CALL_COLOR : "#9ca3af";
         }}
-        linkCurvature={0.2}
+        linkCurvature="curvature"
         linkDirectionalArrowLength={5}
         linkDirectionalArrowRelPos={1}
         linkDirectionalParticles={(l) => {
