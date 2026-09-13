@@ -1629,9 +1629,10 @@ address at a time, and have no case management, scoring or reporting.
 ### What they do far better than VASPtrace
 
 - **Attribution coverage.** Their label databases are enormous; VASPtrace has
-  18 hand-verified addresses.
-- **Tokens and stablecoins.** They trace USDT and other tokens; VASPtrace does
-  not yet.
+  31 hand-verified addresses (and none yet on Arbitrum).
+- **Tokens.** They trace every token; VASPtrace follows only the stablecoins
+  that matter most for fraud — USDT and USDC on the EVM chains, USDT on Tron
+  (added 2026-09-13).
 - **Clustering.** They group addresses into entities (including Bitcoin
   common-input-ownership); VASPtrace has only light behavioral tiers.
 - **Cross-chain and bridges.** They follow money across chains.
@@ -1708,10 +1709,15 @@ Things a reader should know before trusting a result. Most are tracked in
 
 **Tracing scope**
 
-- **Native transfers only.** No ERC-20, no TRC-20, **no USDT** — the dominant
-  rail for Indian fraud proceeds. On Tron a USDT-only mover shows as a single
-  node with no edges; on Ethereum the trace draws an edge to the *token
-  contract* and the real recipient never appears. This is roadmap item 1.
+- **Stablecoins only, beyond native coins.** Fixed 2026-09-13 (roadmap item
+  1): USDT/USDC on Ethereum, Polygon and Arbitrum and USDT on Tron are now
+  followed to their real recipients. Every other token is still invisible,
+  and tokens are allowlisted by contract, so a new stablecoin needs adding by
+  hand. *Before that fix* the tracer was native-only: a USDT-only mover
+  showed as a single node on Tron, and on Ethereum as an edge to the token
+  contract instead of the real recipient.
+- **Arbitrum has no exchange labels.** Its traces draw real graphs but can
+  never recommend a VASP; the app says so with a warning.
 - **Recent history only.** Etherscan 100 txs, Blockstream ~25, Tronscan 50;
   no pagination. Older payments from busy addresses are invisible.
 - **Top 5 destinations per address, 60 addresses per trace.** Low-value
