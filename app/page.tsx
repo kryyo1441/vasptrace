@@ -24,6 +24,8 @@ import { VaspScoreGauge } from "@/components/vasp-score-gauge";
 
 const ADDRESS_PLACEHOLDER: Record<string, string> = {
   ETHEREUM: "0x… wallet address",
+  POLYGON: "0x… wallet address",
+  ARBITRUM: "0x… wallet address",
   BITCOIN: "1…/3…/bc1… wallet address",
   TRON: "T… wallet address",
 };
@@ -95,7 +97,7 @@ export default function Home() {
         <div className="text-center">
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">VASPtrace</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Trace a suspect wallet to the nearest legally-actionable exchange — live on Ethereum, Bitcoin, and Tron.
+            Trace a suspect wallet to the nearest legally-actionable exchange — live on Ethereum, Polygon, Arbitrum, Bitcoin, and Tron.
           </p>
         </div>
 
@@ -122,6 +124,8 @@ export default function Home() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ETHEREUM">Ethereum</SelectItem>
+                    <SelectItem value="POLYGON">Polygon</SelectItem>
+                    <SelectItem value="ARBITRUM">Arbitrum</SelectItem>
                     <SelectItem value="BITCOIN">Bitcoin</SelectItem>
                     <SelectItem value="TRON">Tron</SelectItem>
                   </SelectContent>
