@@ -7,7 +7,7 @@ import { recommendVasp } from "@/lib/scoring";
 import { applyTypologyFlags } from "@/lib/typology";
 import { applyConfidenceClustering } from "@/lib/clustering";
 import type { Chain } from "@/lib/generated/prisma/client";
-import type { NodeKind, TraceEdge, TraceGraph, TraceNode } from "./types";
+import type { NodeKind, TraceAsset, TraceEdge, TraceGraph, TraceNode } from "./types";
 
 // ponytail: fixed caps instead of adaptive backpressure. A wallet with
 // thousands of counterparties would blow the API budget; ranking by value
@@ -20,9 +20,10 @@ const NODE_BUDGET = 60;
 // aggregation by destination.
 export interface RawTransfer {
   to: string;
-  valueBaseUnits: string; // wei / satoshis / sun, as a decimal string
+  valueBaseUnits: string; // of `asset` if set, else wei / satoshis / sun — decimal string
   txHash: string;
   timestamp: number; // unix seconds
+  asset?: TraceAsset; // absent = native currency
 }
 
 export interface ChainAdapter {
@@ -76,13 +77,18 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
       continue;
     }
 
-    // Aggregate outgoing transfers per destination (skip self/change).
-    const byDest = new Map<string, { valueBaseUnits: bigint; txCount: number; latestTxHash: string; latestTimestamp: number }>();
+    // Aggregate outgoing transfers per destination and asset (skip
+    // self/change) — 6-decimal USDT can't be summed with 18-decimal ETH.
+    const byDest = new Map<
+      string,
+      { to: string; asset?: TraceAsset; valueBaseUnits: bigint; txCount: number; latestTxHash: string; latestTimestamp: number }
+    >();
     for (const t of transfers) {
       const to = adapter.normalize(t.to);
       if (!to || to === address) continue;
       const value = BigInt(t.valueBaseUnits || "0");
-      const existing = byDest.get(to);
+      const key = `${to}|${t.asset?.contract ?? ""}`;
+      const existing = byDest.get(key);
       if (existing) {
         existing.valueBaseUnits += value;
         existing.txCount += 1;
@@ -91,19 +97,30 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
           existing.latestTxHash = t.txHash;
         }
       } else {
-        byDest.set(to, { valueBaseUnits: value, txCount: 1, latestTxHash: t.txHash, latestTimestamp: t.timestamp });
+        byDest.set(key, { to, asset: t.asset, valueBaseUnits: value, txCount: 1, latestTxHash: t.txHash, latestTimestamp: t.timestamp });
       }
     }
 
-    const topDestinations = [...byDest.entries()]
-      .sort((a, b) => (b[1].valueBaseUnits > a[1].valueBaseUnits ? 1 : -1))
-      .slice(0, FANOUT_CAP);
+    // FANOUT_CAP applies per asset: one value sort across assets would rank
+    // wei against USDT's 6-decimal units and bury every token transfer.
+    // Native-only nodes get exactly the old sort-then-slice.
+    const takenPerAsset = new Map<string, number>();
+    const topDestinations = [...byDest.values()]
+      .sort((a, b) => (b.valueBaseUnits > a.valueBaseUnits ? 1 : -1))
+      .filter((agg) => {
+        const assetKey = agg.asset?.contract ?? "";
+        const taken = takenPerAsset.get(assetKey) ?? 0;
+        takenPerAsset.set(assetKey, taken + 1);
+        return taken < FANOUT_CAP;
+      });
 
-    for (const [to, agg] of topDestinations) {
+    for (const agg of topDestinations) {
+      const to = agg.to;
       edges.push({
         from: address,
         to,
         valueWei: agg.valueBaseUnits.toString(),
+        ...(agg.asset && { asset: agg.asset }),
         // ponytail: classified from aggregate value alone, not from calldata
         // — an edge that moved zero value across every one of its
         // transactions moved no money, whatever the reason. That misnames

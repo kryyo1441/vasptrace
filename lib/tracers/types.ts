@@ -43,12 +43,29 @@ export interface TraceNode {
 // used to label "0.0000 ETH · 92 tx". See ROADMAP.md item 0.
 export type TraceEdgeKind = "TRANSFER" | "CONTRACT_CALL";
 
+// The token an edge moved, when it isn't the chain's native currency. Only
+// allowlisted stablecoin contracts produce one (lib/etherscan.ts,
+// lib/tronscan.ts), and symbol/decimals come from that allowlist, never from
+// the API — spam tokens copy real symbols. See ROADMAP.md item 1.
+export interface TraceAsset {
+  symbol: string;
+  decimals: number;
+  contract: string;
+}
+
 export interface TraceEdge {
   from: string;
   to: string;
-  // Smallest base unit as a decimal string — wei (Ethereum), satoshis
-  // (Bitcoin), or sun (Tron). Interpret against `TraceGraph.chain`.
+  // Smallest base unit as a decimal string — of `asset` when set, otherwise
+  // of the chain's native currency: wei (Ethereum), satoshis (Bitcoin), or
+  // sun (Tron), interpreted against `TraceGraph.chain`.
   valueWei: string;
+  // Absent = native currency. Case.traceResult rows written before token
+  // tracing (2026-09-13) never have one and must keep reading as native, so
+  // test `edge.asset` for presence, never compare it against a native value.
+  // Edges are aggregated per destination *and* asset: 6-decimal USDT can't
+  // be summed with 18-decimal ETH.
+  asset?: TraceAsset;
   // Absent on Case.traceResult rows written before 2026-09-12 — read it as
   // `=== "CONTRACT_CALL"`, never `!== "TRANSFER"`, so old traces keep
   // rendering as transfers exactly as they did when they were generated.

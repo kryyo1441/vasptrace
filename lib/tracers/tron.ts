@@ -1,5 +1,6 @@
-// LIVE: traces real on-chain Tron transfers via Tronscan, hop by hop.
-import { getOutgoingTransfers } from "@/lib/tronscan";
+// LIVE: traces real on-chain Tron transfers (native TRX + USDT-TRC20) via
+// Tronscan, hop by hop.
+import { getOutgoingTransfers, getOutgoingUsdtTransfers } from "@/lib/tronscan";
 import { traceChain } from "./bfs";
 import type { TraceGraph } from "./types";
 
@@ -9,13 +10,8 @@ export async function traceTron(rootAddress: string, maxDepth: number): Promise<
       chain: "TRON",
       normalize: (a) => a, // base58 addresses are case-sensitive
       fetchOutgoing: async (address) => {
-        const transfers = await getOutgoingTransfers(address);
-        return transfers.map((t) => ({
-          to: t.to,
-          valueBaseUnits: t.valueSun,
-          txHash: t.txHash,
-          timestamp: t.timestamp,
-        }));
+        const [native, usdt] = await Promise.all([getOutgoingTransfers(address), getOutgoingUsdtTransfers(address)]);
+        return [...native, ...usdt];
       },
     },
     rootAddress,
