@@ -16,7 +16,15 @@ The authoritative priority order is **[`ROADMAP.md`](./ROADMAP.md)**, written
 2026-09-12. `PLAN.md` is the frozen 5-day brief — history, not a to-do list.
 `PROGRESS.md`'s recent changelog entries are still the record of what shipped.
 
-**STATE (2026-09-12): nothing from the last two sessions is committed.**
+**STATE (2026-09-13):** the 2026-09-12 work described below has since been
+committed (see `git log`). **ROADMAP item 1 (stablecoin tracing) shipped
+2026-09-13 and is uncommitted, because the user asked for no commits.** It
+touches `lib/{etherscan,tronscan,format,clustering,typology}.ts`,
+`lib/tracers/{types,bfs,ethereum,tron}.ts`, `components/graph-view.tsx`,
+`lib/pdf/report.tsx`, three self-checks and the docs. Don't commit it
+without asking.
+
+*Historical, 2026-09-12:* nothing from the last two sessions is committed.
 This line used to say all tracked files were. Uncommitted right now:
 `README.md` plus six files in `docs/` (post-submission doc work), **eleven
 source files** implementing `ROADMAP.md` item 0, and two untracked additions
@@ -282,10 +290,12 @@ All logged in `PROGRESS.md`, but worth having front-of-mind:
 - **Don't kill the dev server as "cleanup"** when finishing a task — leave it
   running, the user checks the app between turns. (Stopped on request at the
   end of the 2026-09-10 session; restart with `npm run dev`.)
-- **The tracer follows native transfers only — no ERC-20, no TRC-20, no
-  USDT.** `lib/etherscan.ts:30` uses `action=txlist` (native ETH);
-  `lib/tronscan.ts:9-12` says the same for TRX in an in-code comment. This is
-  `ROADMAP.md` item 1, and `tokentx` is already verified working for it.
+- **Since 2026-09-13 the tracer follows native + allowlisted stablecoins**
+  (USDT/USDC on ETH, USDT on Tron). Edges carry `asset?`, and **absent means
+  native**. Anything that ratios or sums `valueWei` must group by
+  `asset?.contract` first. Other tokens are still invisible. See
+  `ROADMAP.md` item 1. *The text below is the pre-2026-09-13 note, kept for
+  history:* the tracer followed native transfers only (`txlist`).
 
   **The consequence is chain-dependent — corrected 2026-09-12 by
   measurement.** This gotcha used to say a USDT mover "renders as a single

@@ -72,7 +72,18 @@ showing what a *realistic* multi-hop trace looks like.
 | `TBADpGt2BSZkHXZQaScWwyR56eoScd4ibx` | Bitfinex | root inferred medium, exchange node high |
 | `TGEFpHcCZnJujjWUtHUpwdTeYe6Ts2QQvh` | Bitfinex | root inferred medium, exchange node high |
 
-Native-TRX-only tracer (see `lib/tronscan.ts`), so these were picked from
+**Since 2026-09-13 the tracer also follows USDT.** All three still reach
+Bitfinex with a medium root. `TZ44…` and `TGEF…` now also draw a USDT edge
+to Bitfinex next to the TRX one. `TAfeh255D76bsBPHtpKj29JpTcwCFmKMV2` is a
+new USDT-heavy option: 17,928 USDT + 46.77 TRX into Bitfinex, ~1.4s at depth
+2. It has been traced once, not drift-checked. On Ethereum, `0x1b82…` now
+shows 3,754.90 USDT → Binance 14 instead of a phantom Tether call, plus a
+multi-hop USDC tree (~11s at depth 3, so use depth 1 for a fast demo). At
+depth 3 that tree also raises **FAN_OUT on three USDC intermediaries, moving
+the case from LOW to MEDIUM risk**. At depth 1 it's still LOW with no flags
+(measured 2026-09-13).
+
+*Pre-2026-09-13 note:* native-TRX-only tracer (see `lib/tronscan.ts`), so these were picked from
 Bitfinex's recent *native TRX* deposits specifically — most Tron flow into
 big exchanges is USDT (TRC20), which isn't traced (out of scope, noted in
 `lib/tronscan.ts`; closing it is [`ROADMAP.md`](./ROADMAP.md) item 1 — if it

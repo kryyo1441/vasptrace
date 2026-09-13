@@ -62,7 +62,15 @@ Known limitation, stated plainly: there's no audit log, no password reset,
 and no SSO. For a real deployment those matter, along with encryption at
 rest for the SQLite file. See [`ROADMAP.md`](./ROADMAP.md).
 
-## Tracer scope — native transfers only
+## Tracer scope — native transfers plus stablecoins
+
+**Updated 2026-09-13:** the tracer now follows **native ETH/BTC/TRX plus
+USDT and USDC on Ethereum and USDT on Tron**. Tokens are allowlisted by
+contract address, since spam tokens copy real symbols. Every other token is
+still invisible. A token edge carries `asset` and is labelled in that
+asset's units; an edge without it is native, which is how every
+pre-2026-09-13 stored case reads. See [`ROADMAP.md`](./ROADMAP.md) item 1.
+What follows is the pre-2026-09-13 description, kept as history.
 
 Stated plainly because it's easy to assume otherwise: the tracer follows
 **native currency transfers only** — ETH, BTC and TRX. It does not follow

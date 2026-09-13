@@ -8,7 +8,7 @@ history.
 
 | # | Item | Status |
 |---|------|--------|
-| 1 | Multi-chain tracer | **Done** — Ethereum, Bitcoin (Blockstream), Tron (Tronscan) all live. Shared BFS engine (`lib/tracers/bfs.ts`), thin per-chain adapters. **Scope: native transfers only** (ETH/BTC/TRX) — no ERC-20/TRC-20/USDT; documented 2026-09-12, `ROADMAP.md` item 1. Edges carry `kind: TRANSFER \| CONTRACT_CALL` since 2026-09-12 so a zero-value contract call can't read as a payment (`ROADMAP.md` item 0). |
+| 1 | Multi-chain tracer | **Done** — Ethereum, Bitcoin (Blockstream), Tron (Tronscan) all live. Shared BFS engine (`lib/tracers/bfs.ts`), thin per-chain adapters. **Scope: native + stablecoins** since 2026-09-13 — ETH + USDT/USDC (ERC-20), TRX + USDT (TRC-20), BTC native; other tokens not traced (`ROADMAP.md` item 1). Edges carry `kind: TRANSFER \| CONTRACT_CALL` since 2026-09-12 so a zero-value contract call can't read as a payment (`ROADMAP.md` item 0). |
 | 2 | Labeled address DB | **Done** — real seed data (exchange hot wallets, Tornado Cash, OFAC SDN, one Tron exchange address). |
 | 3 | Legal-actionability scoring | **Done** — `lib/scoring.ts`, wired into the trace response, rendered on `/` and the case detail page. |
 | 4 | Confidence scoring (high/medium/low) | **Done** — `lib/clustering.ts`: medium = forwards ≥80% of value to a known exchange, low = fan-in from ≥3 senders that forwards onward. Excluded from VASP recommendation (only exact-match routes a disclosure request). |
@@ -1057,7 +1057,45 @@ for preserving every measured baseline**, and it does.
   changing it would alter flag output on stored cases — a different decision
   from how an edge is labelled.
 
+### 2026-09-13 — Shipped ROADMAP item 1: stablecoin tracing (USDT/USDC on ETH, USDT on Tron)
+
+**Not committed** (user asked for no commits). Full design and measurements
+are in `ROADMAP.md` item 1. The short version:
+
+- `tokentx` (Etherscan) and `api/filter/trc20/transfers` (Tronscan) now feed
+  the same BFS as native transfers. Tokens are **allowlisted by contract**:
+  the Binance demo address has a spam `E͏TH` token "sent" from it, which proves
+  that's necessary. Zero-value token transfers are dropped.
+- The item-0 phantom is fixed where it starts: a zero-value `txlist` tx whose
+  hash has an allowlisted token transfer is dropped, and the token transfer
+  replaces it.
+- `TraceEdge.asset?` (absent = native, same back-compat rule as `kind`).
+  Aggregation, `FANOUT_CAP`, the clustering share and PEEL_CHAIN are all per
+  asset; FAN_OUT counts destinations. All of these are no-ops on native-only
+  graphs.
+- Found while verifying: parallel ETH+USDT links to one node would have drawn
+  exactly on top of each other on the canvas, so they now get distinct
+  curvature. The PDF evidence row names the asset. The native clustering
+  reason now says "native-currency value" instead of "value", because
+  "forwards 100% of its outgoing value" isn't true once the same node also
+  sends USDC elsewhere.
+- Baselines: WazirX and Coinbase demo addresses unchanged; the Binance one
+  swaps its phantom for 3,754.90 USDT → Binance 14 and gains a real USDC tree;
+  all Tron demos keep Bitfinex. Timing is ~1.4–1.6s per expanded node on
+  ETH/Tron (two calls per node).
+- Checks: all 5 self-checks, `tsc`, `eslint` and `next build` pass. Traces
+  ran through the library in a throwaway script (deleted), so no `Case` rows
+  were created (still 83). **Not browser-verified**: the dev server was down,
+  and logging in means typing a password, which the browser tool won't do.
+- `docs/EXPLAINER.md` (untracked, not edited here) still says "native
+  transfers only / no USDT" at ~lines 1631 and 1709. Those lines are now
+  stale.
+
 ## Next up
+
+**Updated 2026-09-13:** `ROADMAP.md` items 0 and 1 have both shipped. Item 2
+(BTC common-input clustering) or item 3 (issuer freeze paths, which item 1
+just unblocked) comes next.
 
 **Updated 2026-09-12 — the submission has happened.** All ten original plan
 items shipped, plus auth and RBAC, and the app is demo-ready end to end.
