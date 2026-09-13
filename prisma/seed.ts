@@ -138,6 +138,38 @@ const labeledAddresses: {
     entityName: "MEXC (Tron hot wallet, tagged MXC 2)",
     source: "Tronscan public hot-wallet directory (addressTag: MXC 2)",
   },
+  // --- Polygon exchange wallets (added 2026-09-13 with the POLYGON chain).
+  // Each read from PolygonScan's own public name tag for that address — the
+  // page title, scraped individually, not inferred from the same address's
+  // Ethereum label. Only VASPs already in vaspRegistry (a label with no
+  // registry entry can never be recommended). entityName drops the explorer's
+  // "Binance:" colon, because lib/scoring.ts matches the registry on the
+  // first word. No Arbitrum labels: Arbiscan is Cloudflare-blocked to
+  // scripts and Etherscan's name-tag API is a paid endpoint, so nothing
+  // there could be verified to this bar. ---
+  ...(
+    [
+      ["0x28c6c06298d514db089934071355e5743bf21d60", "Binance 14", "Binance 14"],
+      ["0xf977814e90da44bfa03b6295a0616a897441acec", "Binance Hot Wallet 20", "Binance: Hot Wallet 20"],
+      ["0xb38e8c17e38363af6ebdcb3dae12e0243582891d", "Binance 54", "Binance 54"],
+      ["0xe7804c37c13166ff0b37f5ae0bb07a3aebb6e245", "Binance 48", "Binance 48"],
+      ["0x082489a616ab4d46d1947ee3f912e080815b08da", "Binance 53", "Binance 53"],
+      ["0x5a52e96bacdabb82fd05763e25335261b270efcb", "Binance 28", "Binance 28"],
+      ["0x2910543af39aba0cd09dbb2d50200b3e800a63d2", "Kraken 1", "Kraken 1"],
+      ["0x06959153b974d0d5fdfd87d561db6d8d4fa0bb0b", "OKX 1", "OKX 1"],
+      ["0x236f9f97e0e62388479bf9e5ba4889e46b0273c3", "OKX 2", "OKX 2"],
+      ["0x6cc5f688a315f3dc28a7781717a9a798a59fda7b", "OKX", "OKX"],
+      ["0x2b5634c42055806a59e9107ed44d43c426e58258", "KuCoin 1", "KuCoin 1"],
+      ["0xd6216fc19db775df9774a6e33526131da7d19a2c", "KuCoin 6", "KuCoin 6"],
+      ["0x71660c4005ba85c37ccec55d0c4493e66fe775d3", "Coinbase 1", "Coinbase 1"],
+    ] as const
+  ).map(([address, entityName, tag]) => ({
+    address,
+    chain: Chain.POLYGON,
+    labelType: LabelType.EXCHANGE,
+    entityName,
+    source: `PolygonScan public name tag (${tag})`,
+  })),
   // --- Tornado Cash mixer contracts. OFAC-sanctioned 2022, delisted by
   // Treasury March 2025 — still labeled MIXER here since the tracer's job
   // is AML pattern detection, not live sanctions-list matching. ---

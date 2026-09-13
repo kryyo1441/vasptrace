@@ -12,6 +12,11 @@ enum Chain {
   BITCOIN
   ETHEREUM
   TRON
+  // EVM chains traced through the same Etherscan v2 key as ETHEREUM (only
+  // the chainid differs). BSC, Base, Optimism and Avalanche are deliberately
+  // absent: Etherscan's free tier refuses them (verified 2026-09-13).
+  POLYGON
+  ARBITRUM
 }
 
 enum LabelType {
