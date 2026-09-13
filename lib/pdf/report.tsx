@@ -174,6 +174,9 @@ export function CaseReportDocument({ kase, graph }: { kase: Case; graph: TraceGr
           {graph.edges.map((e, i) => (
             <Text key={i} style={[styles.subtitle, styles.mono]}>
               {e.from} {"->"} {e.to} ({e.txCount} tx
+              {/* Edges are per asset, so the same from -> to can appear twice
+                  (e.g. ETH and USDT) — the row has to say which. */}
+              {e.asset ? `, ${e.asset.symbol}` : ""}
               {isContractCall(e) ? ", contract calls — no value moved" : ""}):{" "}
               {e.latestTxHash}
             </Text>
