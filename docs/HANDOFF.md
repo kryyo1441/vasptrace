@@ -16,13 +16,28 @@ The authoritative priority order is **[`ROADMAP.md`](./ROADMAP.md)**, written
 2026-09-12. `PLAN.md` is the frozen 5-day brief — history, not a to-do list.
 `PROGRESS.md`'s recent changelog entries are still the record of what shipped.
 
-**STATE (2026-09-13):** the 2026-09-12 work described below has since been
-committed (see `git log`). **ROADMAP item 1 (stablecoin tracing) shipped
-2026-09-13 and is uncommitted, because the user asked for no commits.** It
-touches `lib/{etherscan,tronscan,format,clustering,typology}.ts`,
-`lib/tracers/{types,bfs,ethereum,tron}.ts`, `components/graph-view.tsx`,
-`lib/pdf/report.tsx`, three self-checks and the docs. Don't commit it
-without asking.
+**STATE (2026-09-13):** two features shipped on 2026-09-13 and were handed to
+the user to commit themselves at the end of that session (the session itself
+was told not to commit). If `git status` still shows them modified, that
+commit didn't happen — check before building on top.
+
+- **ROADMAP item 1, stablecoin tracing** — touches
+  `lib/{etherscan,tronscan,format,clustering,typology}.ts`,
+  `lib/tracers/{types,bfs,ethereum,tron}.ts`, `components/graph-view.tsx`,
+  `lib/pdf/report.tsx`, three self-checks.
+
+**Polygon + Arbitrum chains, 2026-09-13** (user's pick —
+free on the Etherscan key; BSC/Base/Optimism/Avalanche are not). `Chain` enum
+gained `POLYGON`/`ARBITRUM` via migration `20260913183402_add_polygon_arbitrum`
+— **on this branch only**; `vercel-postgres` would need the same migration if
+revived — generate it on that branch; on Postgres it's expected (not
+verified) to be a real `ALTER TYPE`, unlike the empty SQLite one.
+`dev.db.pre-evm-chains` is the pre-migration DB backup — don't delete. 13
+Polygon exchange labels seeded from PolygonScan name tags; **Arbitrum has
+none** and can't recommend a VASP until someone verifies labels by hand
+(Arbiscan blocks scripts). The case count is **88** as of this session — the
+5 above 83 are the user's own traces. After a `prisma generate`, restart
+`next dev` with `.next` cleared or the dev server keeps the old enum.
 
 *Historical, 2026-09-12:* nothing from the last two sessions is committed.
 This line used to say all tracked files were. Uncommitted right now:
@@ -42,8 +57,8 @@ Only two matter here: `btc_wallets_data.csv` (documented below) and
 Demo accounts: `investigator` / `vasptrace-investigator-2026`, `supervisor` /
 `vasptrace-supervisor-2026` (also in `README.md`). Every case belongs to the
 investigator account and the supervisor owns none but sees them all, so both
-logins show the same count on the dashboard — **83 as of 2026-09-12**, see
-below.
+logins show the same count on the dashboard — **88 as of 2026-09-13** (83 on
+2026-09-12), see below.
 
 **Everything the 5-day plan asked for is done** — all 10 core items plus auth
 and RBAC. The dry-run (old item 3) and pitch rehearsal (old item 4) were the
@@ -65,8 +80,10 @@ kept below only as history.
   states exactly what is and isn't verified. **Do not merge it into the
   demo branch before demo day.**
 
-**Don't "clean up" the case count.** The DB is at **83** cases (was 82 until
-2026-09-12): the 81 backfilled ones plus **two** the *user* traced
+**Don't "clean up" the case count.** The DB is at **88** cases as of
+2026-09-13 — the 5 added that day are the *user's* own traces from the
+running app (the session's one test case was deleted). Before that it was
+**83** (82 until 2026-09-12): the 81 backfilled ones plus **two** the *user* traced
 themselves — `bc1qydntupzckl7m09a5mvaqsh5wvhexkt0rrsfjth` (2026-09-09, the
 first address in the Bitcoin dataset below — 54 nodes, HIGH risk, both
 typology flags) and a second Bitcoin trace from 2026-09-12 07:29Z. Both look

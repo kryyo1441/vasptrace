@@ -64,6 +64,20 @@ and at depth 5 it hits the 60-node budget cap, so the trail is truncated.
 The 1-hop addresses above remain the safe headline picks; this one is for
 showing what a *realistic* multi-hop trace looks like.
 
+## Polygon and Arbitrum (Etherscan v2) — added 2026-09-13
+
+Traced once through the library on 2026-09-13, not drift-checked to the bar
+of the tables above.
+
+| Chain | Address | Hits |
+|---|---|---|
+| Polygon | `0x135db93c0490501bf8d00600a9e494fdb7920b2d` | Binance 48 — 765.57 USDT0, root medium, ~1.4s at depth 1–2 (also verified end to end through `POST /api/trace`, case page and PDF) |
+| Polygon | `0x10b692f5191c2c36a727b5a335337e7a300eddec` | Binance 48 — 208,387 USDT0 over 44 tx, root medium |
+| Arbitrum | `0xe252fb1eab899250361feab4ecbc358b02d81b3e` | no recommendation (no Arbitrum labels exist) — a busy USDT0/USDC graph, ~50 nodes at depth 2; the page shows a "no labeled addresses are seeded for ARBITRUM" warning |
+
+An EVM `0x…` address is valid on all three EVM chains, so pick the chain in
+the selector deliberately — the app can't infer it.
+
 ## Tron (Tronscan)
 
 | Address | Hits | Confidence chain |

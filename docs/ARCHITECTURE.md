@@ -64,8 +64,15 @@ rest for the SQLite file. See [`ROADMAP.md`](./ROADMAP.md).
 
 ## Tracer scope — native transfers plus stablecoins
 
-**Updated 2026-09-13:** the tracer now follows **native ETH/BTC/TRX plus
-USDT and USDC on Ethereum and USDT on Tron**. Tokens are allowlisted by
+**Updated 2026-09-13:** the tracer runs on **five chains** — Ethereum,
+Polygon and Arbitrum (one adapter, `lib/tracers/ethereum.ts`, over Etherscan
+v2 with only the `chainid` changing; BSC/Base/Optimism/Avalanche are refused
+by Etherscan's free tier), Bitcoin and Tron — and follows **native transfers
+plus USDT/USDC on the EVM chains and USDT on Tron**. The EVM chains share an
+address format, so a pasted `0x…` address can't be auto-assigned to one: the
+chain selector decides, and the wrong-chain error names all three. Arbitrum
+has no seeded labels (Arbiscan can't be read by a script, and Etherscan's
+name-tag API is paid), so it traces but never recommends. Tokens are allowlisted by
 contract address, since spam tokens copy real symbols. Every other token is
 still invisible. A token edge carries `asset` and is labelled in that
 asset's units; an edge without it is native, which is how every
@@ -133,7 +140,7 @@ heuristic/simulation. At a glance:
 
 | Piece | Status |
 |---|---|
-| Ethereum/Bitcoin/Tron tracers | **Live** — real public block explorer APIs (Etherscan, Blockstream, Tronscan), no synthetic data |
+| Ethereum/Polygon/Arbitrum/Bitcoin/Tron tracers | **Live** — real public block explorer APIs (Etherscan v2, Blockstream, Tronscan), no synthetic data |
 | Labeled address DB, VASP registry | **Live** — real, individually-verified public data (`prisma/seed.ts`) |
 | Legal-actionability scoring | **Live** — real arithmetic over the seeded registry, not a black box |
 | Confidence clustering (medium/low tiers) | **Live** — real graph-structural heuristics, not AI/ML (`lib/clustering.ts`) |

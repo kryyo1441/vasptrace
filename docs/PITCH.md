@@ -45,7 +45,9 @@ Built solo in 5 days for Smart India Hackathon, problem statement 26182
 
 ## 2. What we built — six things, one differentiator
 
-1. **Live multi-chain tracer** — Ethereum, Bitcoin, Tron. Real public APIs,
+1. **Live multi-chain tracer** — Ethereum, Polygon, Arbitrum, Bitcoin, Tron,
+   including USDT/USDC stablecoin flows (Polygon/Arbitrum added
+   post-submission, 2026-09-13). Real public APIs,
    not synthetic data. Hop-by-hop, depth-limited, stops at a labeled
    exchange/mixer or a configurable max depth.
 2. **Legal-actionability scoring (the differentiator)** — ranks every
@@ -140,8 +142,8 @@ project convention, enforced from day one.
 
 | Piece | Status |
 |---|---|
-| Ethereum / Bitcoin / Tron tracers | **Live** — real public block-explorer APIs, zero synthetic data. Scope: **native transfers only** (ETH/BTC/TRX), not ERC-20/TRC-20 — see §12. Edges are typed `TRANSFER` vs `CONTRACT_CALL`, so a zero-value contract call is never shown, counted or cited as a payment |
-| Labeled address DB, VASP registry | **Live** — real, individually source-checked public data (16 VASPs, 18 labeled addresses: 15 exchange, 2 mixer, 1 ransomware) |
+| Ethereum / Polygon / Arbitrum / Bitcoin / Tron tracers | **Live** — real public block-explorer APIs, zero synthetic data. Scope (updated 2026-09-13): native transfers **plus allowlisted stablecoins** — USDT/USDC on the EVM chains, USDT on Tron; other tokens not followed. Edges are typed `TRANSFER` vs `CONTRACT_CALL`, so a zero-value contract call is never shown, counted or cited as a payment |
+| Labeled address DB, VASP registry | **Live** — real, individually source-checked public data (16 VASPs, 31 labeled addresses: 28 exchange, 2 mixer, 1 ransomware; 13 of the exchanges are Polygon, none yet on Arbitrum) |
 | Legal-actionability scoring | **Live** — real arithmetic over the seeded registry, score breakdown shown on screen, not a black box |
 | Confidence clustering | **Live** — real graph-structural heuristics (forward-ratio, fan-in), not AI/ML |
 | Typology flags | **Live** — real rule-based pattern detection over the traced graph |
@@ -367,10 +369,11 @@ not just that it works.
 
 ## 11. By the numbers
 
-- **3 chains** traced live: Ethereum, Bitcoin, Tron
-- **16 VASPs** in the legal-actionability registry, **18** individually
+- **5 chains** traced live: Ethereum, Polygon, Arbitrum, Bitcoin, Tron (3 at
+  submission; Polygon/Arbitrum added 2026-09-13, Arbitrum without labels yet)
+- **16 VASPs** in the legal-actionability registry, **31** individually
   source-verified labeled addresses (exchanges, mixers, a ransomware
-  address)
+  address — 18 at submission, plus 13 Polygon exchange wallets)
 - **82 real cases** traced during development and demo rehearsal — not a
   handful of cherry-picked screenshots
 - **10/10** original plan items shipped with a working first pass by day 1,

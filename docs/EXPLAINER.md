@@ -894,8 +894,8 @@ auth, which was added later.
 ### Feature 1 — Multi-chain transaction tracer
 
 **What it solves.** Following money by hand across many hops is slow and
-error-prone. This does it automatically, on three chains, using live public
-data.
+error-prone. This does it automatically, on five chains (Ethereum, Polygon,
+Arbitrum, Bitcoin, Tron — three at submission), using live public data.
 
 **Files.** `lib/tracers/bfs.ts` (the engine), `lib/tracers/{ethereum,bitcoin,tron}.ts`
 (thin per-chain adapters), `lib/{etherscan,blockstream,tronscan}.ts` (API
@@ -1441,10 +1441,12 @@ to deploy, keep in sync and authenticate between). The brief allowed a separate
 Python service only if a piece genuinely needed Python; none did.
 
 **A shared engine with thin adapters.** The only thing that truly differs
-between Bitcoin, Ethereum and Tron is how you fetch an address's outgoing
-transfers. Everything investigative — search, stopping rules, clustering,
-flags, scoring — is chain-agnostic and written once, so all three chains behave
-identically and a fix in one place fixes all three.
+between chains is how you fetch an address's outgoing transfers. Everything
+investigative — search, stopping rules, clustering, flags, scoring — is
+chain-agnostic and written once, so every chain behaves identically and a fix
+in one place fixes all of them. Ethereum, Polygon and Arbitrum go further and
+share a single adapter: same address format, same Etherscan v2 API, only the
+chain id differs.
 
 **Analysis runs after the search, over the whole graph.** Clustering and
 typology both need to see all of a node's edges (in and out), which only exist

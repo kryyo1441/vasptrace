@@ -397,6 +397,15 @@ heuristics are actually reproducible from public data.
 
 ## Smaller items, not ranked
 
+- **More chains (partly done 2026-09-13).** Polygon and Arbitrum shipped on
+  the Etherscan v2 adapter (`PROGRESS.md`, 2026-09-13). Open: **Arbitrum
+  exchange labels** (none seeded, since Arbiscan can't be read by a script;
+  verify by hand to the seed's bar), and **BSC / Base / Optimism /
+  Avalanche**, which are the same code plus an allowlist entry each but are
+  refused by Etherscan's free tier. BSC matters most (USDT-BEP20 is a real
+  fraud rail), so that's a paid-plan decision. Non-EVM chains (Solana etc.)
+  each need a new API client and address format.
+
 - **Audit log / chain of custody** — already promised in `PITCH.md` §12 and
   named as a known gap in `ARCHITECTURE.md`. For a tool whose output is meant
   to support legal process, "who ran what, when, and what did the report say

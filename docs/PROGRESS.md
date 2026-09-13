@@ -8,7 +8,7 @@ history.
 
 | # | Item | Status |
 |---|------|--------|
-| 1 | Multi-chain tracer | **Done** — Ethereum, Bitcoin (Blockstream), Tron (Tronscan) all live. Shared BFS engine (`lib/tracers/bfs.ts`), thin per-chain adapters. **Scope: native + stablecoins** since 2026-09-13 — ETH + USDT/USDC (ERC-20), TRX + USDT (TRC-20), BTC native; other tokens not traced (`ROADMAP.md` item 1). Edges carry `kind: TRANSFER \| CONTRACT_CALL` since 2026-09-12 so a zero-value contract call can't read as a payment (`ROADMAP.md` item 0). |
+| 1 | Multi-chain tracer | **Done** — Ethereum, Bitcoin (Blockstream), Tron (Tronscan) all live. Shared BFS engine (`lib/tracers/bfs.ts`), thin per-chain adapters. **Scope: native + stablecoins** since 2026-09-13 — ETH + USDT/USDC (ERC-20), TRX + USDT (TRC-20), BTC native; other tokens not traced (`ROADMAP.md` item 1). **Polygon and Arbitrum** added 2026-09-13 through the same Etherscan v2 adapter (Arbitrum has no labels yet). Edges carry `kind: TRANSFER \| CONTRACT_CALL` since 2026-09-12 so a zero-value contract call can't read as a payment (`ROADMAP.md` item 0). |
 | 2 | Labeled address DB | **Done** — real seed data (exchange hot wallets, Tornado Cash, OFAC SDN, one Tron exchange address). |
 | 3 | Legal-actionability scoring | **Done** — `lib/scoring.ts`, wired into the trace response, rendered on `/` and the case detail page. |
 | 4 | Confidence scoring (high/medium/low) | **Done** — `lib/clustering.ts`: medium = forwards ≥80% of value to a known exchange, low = fan-in from ≥3 senders that forwards onward. Excluded from VASP recommendation (only exact-match routes a disclosure request). |
@@ -1090,6 +1090,58 @@ are in `ROADMAP.md` item 1. The short version:
 - `docs/EXPLAINER.md` (untracked, not edited here) still says "native
   transfers only / no USDT" at ~lines 1631 and 1709. Those lines are now
   stale.
+
+### 2026-09-13 (later) — Polygon and Arbitrum chains
+
+Asked for "more wallets than Bitcoin, Tron and ETH". **Not committed.**
+
+- **Scope decision, measured:** Etherscan v2 on the current free key serves
+  Polygon (137) and Arbitrum (42161); **BSC, Base, Optimism and Avalanche
+  answer "Free API access is not supported for this chain"**. The user picked
+  Polygon + Arbitrum on this branch only. BSC (a major USDT rail) is a
+  paid-plan decision.
+- **One adapter, not three:** `lib/tracers/ethereum.ts` is now `traceEvm`
+  keyed by `chainid`; `lib/etherscan.ts` takes a `chainId` and its stablecoin
+  allowlist is per chain — each contract verified live against Etherscan's
+  own `tokenSymbol`/`tokenDecimal`. Symbols follow each explorer (`USDT0` is
+  Tether's rebrand on Polygon/Arbitrum; `USDC.e` is bridged USDC). Native
+  units: POL on Polygon, ETH on Arbitrum. One pacing key for all chainids,
+  since they share one API key.
+- **Address detection:** EVM chains share `0x…`, so `detectChain` became
+  `detectChains` (all matches) and the wrong-chain error names "Ethereum,
+  Polygon or Arbitrum". `lib/address.test.ts` updated — the non-overlap
+  property now holds between chain *families*.
+- **Migration:** `20260913183402_add_polygon_arbitrum` — empty on SQLite
+  (enums are TEXT), applied with `migrate deploy` after backing the DB up to
+  `dev.db.pre-evm-chains`. All 88 cases intact.
+- **Labels:** 13 Polygon exchange wallets (Binance ×6, OKX ×3, KuCoin ×2,
+  Kraken, Coinbase), each read from PolygonScan's own public name tag, not
+  inferred from the Ethereum label of the same address. Bybit and Gate tags
+  also verified but skipped — neither is in `vaspRegistry`, so they could
+  never be recommended. **No Arbitrum labels:** Arbiscan returns a Cloudflare
+  403 to scripts, Etherscan's `getaddresstag` is a paid endpoint, and the
+  browser extension wasn't connected — nothing met the seed's verification
+  bar.
+- **Found and fixed while verifying:** a Polygon trace still drew a phantom
+  "34 contract calls" edge into the USDT0 contract. `txlist` and `tokentx`
+  are separate 100-row windows and a busy receiver's `tokentx` page is half
+  incoming, so it reaches back less far — 34 of 78 `transfer()` calls had no
+  matching row. Zero-value txs *into* an allowlisted token contract are now
+  never edges (`ponytail:` note on the invisible older transfers).
+- **Verified live** (library calls, no Case rows): two Polygon USDT0 senders
+  reach **Binance 48** with a medium root ("Forwards 100% of its outgoing
+  USDT0…"); two Arbitrum movers produce 38–50-node USDT0/USDC graphs with no
+  recommendation, as expected; ETH baselines (WazirX, Binance) unchanged.
+  All 5 self-checks, `tsc`, `eslint`, `next build` pass.
+- **Label-less chains say so.** Without labels, an Arbitrum trace's "No
+  labeled VASP reached" card read as "clean" rather than "can't tell". `bfs.ts`
+  now warns when a chain has zero seeded labels (verified: fires on Arbitrum,
+  not Polygon), and `/cases/[id]`'s no-VASP card now lists the trace's
+  warnings (`/` already showed them).
+- Verified through the running app too: a real `POST /api/trace` on Polygon
+  persisted a `POLYGON` case (Binance recommendation), its case page and PDF
+  returned 200, and the test row was deleted (count back to 88).
+- Not browser-verified (extension not connected; login is a password).
 
 ## Next up
 

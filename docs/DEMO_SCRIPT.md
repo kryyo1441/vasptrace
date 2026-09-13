@@ -298,8 +298,9 @@ sqlite3 dev.db "delete from \"Case\" where id='<the-id>';"
 sqlite3 dev.db "select count(*) from \"Case\";"   # back to the pre-demo count
 ```
 
-> **Check `createdAt` before deleting anything.** The baseline is **83** cases
-> as of 2026-09-12 (it was 82 until the user traced another address that day),
+> **Check `createdAt` before deleting anything.** The baseline is **88** cases
+> as of 2026-09-13 (83 on 2026-09-12, 82 before that — every increase was the
+> user tracing real addresses),
 > so treat it as a landmark rather than a checksum and delete only the rows
 > *this* run created. Two Bitcoin cases are the user's own traces, not test
 > pollution: `cmtuarozi00008iyf9ma7ibz5` (2026-09-09) and one from
