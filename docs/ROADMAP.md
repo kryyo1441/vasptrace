@@ -177,7 +177,69 @@ selectors) also stayed out.
 Binance / root `medium`; `0x82c705d7…` = 2 nodes / 1 edge / **0 zero-value** /
 Coinbase / root `medium`. Only the Coinbase path is pure native value today.
 
-## 1. Token / stablecoin tracing — the biggest real gap
+## 1. Token / stablecoin tracing — SHIPPED 2026-09-13 (stablecoins only)
+
+### What shipped
+
+- **Ethereum:** `txlist` + `tokentx` per node; **USDT and USDC** only, keyed
+  by contract in `ERC20_ALLOWLIST` (`lib/etherscan.ts`). Allowlisting by
+  contract isn't optional: the Binance demo address has a spam token named
+  `E͏TH` (zero-width character) "sent" from it. Zero-value token transfers are
+  dropped (address poisoning).
+- **Tron:** native TRX + **USDT-TRC20** via
+  `api/filter/trc20/transfers?relatedAddress=…&contract_address=<USDT>`
+  (`lib/tronscan.ts`). `fromAddress` isn't served keyless (301 → 401), so
+  direction is filtered client-side from a 50-row mixed-direction page.
+- **Phantom fixed at the source:** a USDT send is also a zero-value `txlist`
+  tx into the token contract with the same hash. The ETH adapter drops those
+  hashes when an allowlisted transfer replaces them, so the edge goes to the
+  real recipient instead of Tether. Non-allowlisted token sends keep their
+  `CONTRACT_CALL` edge, as before.
+- **Edge model:** `asset?: { symbol, decimals, contract }` on `TraceEdge`,
+  **absent = native**, so stored cases read unchanged. Edges aggregate per
+  destination *and* asset; `FANOUT_CAP` applies per asset (one value sort
+  across assets would bury every token).
+- **Heuristics made asset-safe:** `clustering.ts` takes the 80% share within
+  one asset; `typology.ts` PEEL_CHAIN only compares same-asset legs, FAN_OUT
+  counts destinations rather than edges. On a native-only trace all three
+  compute exactly what they did before.
+- **Display:** `edgeAmountLabel` uses the edge's asset (`3754.9000 USDT · 8
+  tx`); parallel ETH+USDT links to one node bow apart on the canvas; PDF
+  evidence rows name the asset. Self-checks extended in `format`,
+  `clustering` and `typology`.
+
+**Measured against item 0's baseline (depth 3, live, 2026-09-13):**
+`0x6eedf92f…` unchanged (2/1/1 call/WazirX/root null). `0x82c705d7…`
+unchanged (2/1/0/Coinbase/medium). `0x1b821468…` changed as predicted: the
+phantom Tether calls are gone, replaced by **3,754.90 USDT → Binance 14**
+beside the 23.70 ETH edge, and a previously invisible **USDC** send to an
+intermediary opens a real multi-hop stablecoin tree (27–40 nodes between
+runs, since it's a live, active address). Still Binance, root still medium,
+and FAN_OUT now fires on it. All three Tron demos keep Bitfinex + medium
+root; two gain a USDT edge. `TAfeh255…` (a USDT sender into Bitfinex) shows
+17,928 USDT alongside 46.77 TRX.
+
+**Timing: ~1.4–1.6s per expanded ETH/Tron node**, now that each node makes
+two paced calls. That's measured on the new code only, not A/B'd against the
+old code on an identical graph. One-hop demo traces still finish in
+~1–1.5s. Bitcoin is untouched.
+
+**Breadth and risk changes, measured on `0x1b821468…`:** because
+`FANOUT_CAP` is per asset, one node can now emit up to 15 edges (14
+observed, on a USDC intermediary) where it used to emit 5. The address still
+doesn't hit `NODE_BUDGET` (35 nodes, no warning). But at depth 3 FAN_OUT now
+fires on three USDC intermediaries, so `deriveRiskLevel` goes from **LOW to
+MEDIUM**. At depth 1 it's still LOW with no flags. That is real flow
+becoming visible, not noise, but the node-budget measurement from 2026-09-10
+(2.4% of traces truncated) was taken at native-only breadth and hasn't been
+redone.
+
+**Still open:** Tron USDT pagination (one 50-row page); any token beyond the
+three stablecoins; the canvas's parallel-edge bowing wasn't checked in a
+browser (no logged-in browser session). Item 3 (issuer freeze paths) is now
+unblocked.
+
+### Original write-up
 
 **What.** Both tracers follow **native transfers only** — `lib/etherscan.ts:30`
 uses `action=txlist` (native ETH, not `tokentx`), and `lib/tronscan.ts:9-12`
