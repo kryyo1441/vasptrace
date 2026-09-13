@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { traceEthereum } from "@/lib/tracers/ethereum";
+import { traceArbitrum, traceEthereum, tracePolygon } from "@/lib/tracers/ethereum";
 import { traceBitcoin } from "@/lib/tracers/bitcoin";
 import { traceTron } from "@/lib/tracers/tron";
 import { deriveRiskLevel } from "@/lib/scoring";
@@ -7,12 +7,14 @@ import { notifyN8n } from "@/lib/n8n";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { CHAIN_LABEL } from "@/lib/format";
-import { ADDRESS_VALIDATORS, detectChain } from "@/lib/address";
+import { ADDRESS_VALIDATORS, detectChains } from "@/lib/address";
 import type { Chain } from "@/lib/generated/prisma/client";
 import type { TraceGraph } from "@/lib/tracers/types";
 
 const TRACERS: Record<Chain, (address: string, maxDepth: number) => Promise<TraceGraph>> = {
   ETHEREUM: traceEthereum,
+  POLYGON: tracePolygon,
+  ARBITRUM: traceArbitrum,
   BITCOIN: traceBitcoin,
   TRON: traceTron,
 };
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
   // its one current client happens to be careful.
   const address = rawAddress.trim();
   if (!chain || !(chain in ADDRESS_VALIDATORS)) {
-    return NextResponse.json({ error: "chain must be one of ETHEREUM, BITCOIN, TRON" }, { status: 400 });
+    return NextResponse.json({ error: `chain must be one of ${Object.keys(TRACERS).join(", ")}` }, { status: 400 });
   }
   if (!Number.isInteger(maxDepth) || maxDepth < 1 || maxDepth > 10) {
     return NextResponse.json({ error: "maxDepth must be an integer between 1 and 10" }, { status: 400 });
@@ -53,11 +55,13 @@ export async function POST(req: NextRequest) {
   if (!ADDRESS_VALIDATORS[typedChain].test(address)) {
     // The likely mistake is a valid address pasted against the wrong chain
     // selector, so say which chain it *is* rather than only what it isn't.
-    const actualChain = detectChain(address);
+    // A 0x address is valid on every EVM chain, so this can name several.
+    const names = detectChains(address).map((c) => CHAIN_LABEL[c]);
+    const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}` : names[0];
     return NextResponse.json(
       {
-        error: actualChain
-          ? `That looks like ${/^[aeiou]/i.test(CHAIN_LABEL[actualChain]) ? "an" : "a"} ${CHAIN_LABEL[actualChain]} address, but ${CHAIN_LABEL[typedChain]} is selected — switch the chain selector to ${CHAIN_LABEL[actualChain]}.`
+        error: list
+          ? `That looks like ${/^[aeiou]/i.test(list) ? "an" : "a"} ${list} address, but ${CHAIN_LABEL[typedChain]} is selected — switch the chain selector to ${list}.`
           : `address is not a valid ${CHAIN_LABEL[typedChain]} address`,
       },
       { status: 400 }
