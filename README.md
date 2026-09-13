@@ -10,8 +10,12 @@ for how it's built and what's live vs. simulated,
 [`docs/PROGRESS.md`](./docs/PROGRESS.md) for current status, and
 [`docs/ROADMAP.md`](./docs/ROADMAP.md) for what's next.
 
-Tracer scope: **native transfers only** (ETH/BTC/TRX) — ERC-20/TRC-20 token
-flows including USDT are not followed yet (`docs/ROADMAP.md` item 1). Graph
+Tracer scope: **five chains** — Ethereum, Polygon and Arbitrum (all via one
+Etherscan v2 key), Bitcoin and Tron — following native transfers plus
+allowlisted stablecoins (USDT/USDC on the EVM chains, USDT on Tron). Other
+tokens are not followed (`docs/ROADMAP.md` item 1). Arbitrum has no seeded
+exchange labels yet, so its traces draw a graph but can't recommend a VASP.
+Graph
 edges distinguish a real value `TRANSFER` from a zero-value `CONTRACT_CALL`,
 so an interaction is never presented as a payment — including in the
 generated disclosure request (`docs/ROADMAP.md` item 0).
@@ -40,8 +44,8 @@ any long random string, e.g. `node -e "console.log(require('crypto').randomBytes
 the app refuses to boot without it rather than silently signing sessions
 with `undefined`.
 
-Once signed in, paste a wallet address, pick a chain (Ethereum, Bitcoin, or
-Tron all trace live), run a trace.
+Once signed in, paste a wallet address, pick a chain (Ethereum, Polygon,
+Arbitrum, Bitcoin or Tron — all trace live), run a trace.
 
 `TRONSCAN_API_KEY` in `.env.example` is optional — the Tron tracer works
 keyless at demo volume.
