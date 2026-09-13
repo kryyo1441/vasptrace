@@ -112,6 +112,16 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           <CardContent className="text-sm text-muted-foreground">
             No labeled VASP reached within {graph.maxDepth} hop{graph.maxDepth === 1 ? "" : "s"} — no disclosure
             request can be recommended for this trace.
+            {/* The trace's own warnings say *why* — e.g. a chain with no
+                seeded labels (Arbitrum), or a truncated search — which is
+                the difference between "clean" and "couldn't tell". */}
+            {graph.warnings.length > 0 && (
+              <ul className="mt-2 list-disc pl-5">
+                {graph.warnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       )}

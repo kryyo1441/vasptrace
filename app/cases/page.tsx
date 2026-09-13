@@ -20,6 +20,8 @@ const CHAIN_COLOR: Record<Chain, string> = {
   ETHEREUM: "var(--chart-2)",
   BITCOIN: "var(--chart-3)",
   TRON: "var(--chart-4)",
+  POLYGON: "var(--chart-1)",
+  ARBITRUM: "var(--chart-5)",
 };
 
 function StatTile({
