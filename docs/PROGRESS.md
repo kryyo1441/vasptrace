@@ -20,9 +20,11 @@ history.
 | 10 | Typology/pattern flags | **Done** — `lib/typology.ts`, flags rendered directly on graph edges/nodes plus a summary badge row. |
 | — | Auth + RBAC | **Done (added scope, 2026-09-09)** — not one of the ten original items; day 1 scoped it out as "single-user demo is fine" and that was reversed. Login gate (`proxy.ts` + `lib/auth.ts`), per-investigator case scoping, object-level authorization on case detail / PDF / Sahyog. See the 2026-09-09 "Auth" changelog entry. |
 
-Remaining out-of-scope items (bridge correlation placeholder,
-`confirmedByVaspResponse`) are still correctly out of scope — no action
-needed there yet. Auth *was* on that list and is no longer: see above.
+Remaining out-of-scope item: bridge correlation placeholder (`ROADMAP.md`
+item 4, scoped but not built — see the 2026-09-14 session 2 entry).
+`confirmedByVaspResponse` was also on this list and is no longer: wired up
+2026-09-14, see the changelog. Auth *was* on this list too and reversed
+earlier: see above.
 
 ## Changelog
 
@@ -1291,9 +1293,377 @@ User decision: "make leads routable with the confirm-ownership wording".
   An exact-match case page (not routed) still reads "Route disclosure request
   to Binance" with no inference text.
 
+### 2026-09-14 (session 2) — Bugs fixed, ROADMAP items 3/5/6 shipped, smaller features, merge
+
+Asked to finish the rest of `ROADMAP.md`, the smaller items, and the known
+bugs in one session, browser-verify, update docs, and not commit. Full list
+below; two things deliberately **not** attempted are called out at the end.
+
+**Branch state first.** `main` was 52 commits behind this branch with 0
+ahead, so `day3-n8n-rehearsal → main` was a clean fast-forward (no merge
+commit, nothing to resolve) — done via `git branch -f`, not a commit, so it
+respects "don't commit anything." `vercel-postgres` was left alone; merging
+it would swap SQLite for Postgres and break the whole session. `HANDOFF.md`
+and this file's own recent entries said things were "not committed" — that
+was stale, `git status` was clean before any of today's work started, and
+`main` is now caught up too.
+
+**Bugs, fixed first because they gated everything else:**
+
+- **Dangling edge at `NODE_BUDGET`** (`lib/tracers/bfs.ts`) — an edge to a
+  destination the budget didn't let become a node used to get pushed anyway,
+  and `react-force-graph` threw `node not found` on it (flagged, not fixed,
+  2026-09-14 earlier the same day). Fixed at the root: the node-creation
+  block moved before the edge push, and the edge is skipped when the node
+  genuinely isn't there. `components/graph-view.tsx` also filters any edge
+  whose endpoint is missing from `graph.nodes`, so the small number of
+  already-stored truncated cases with a dangling edge still render.
+- **Legal citation was stale.** `lib/format.ts`'s `LEGAL_BASIS` cited
+  "Section 91, CrPC" — repealed 2024-07-01. Now cites BNSS Section 94 (the
+  actual successor provision, confirmed by web search, not assumed) *and*
+  names the old CrPC section for anyone cross-referencing older material:
+  `"Section 94, Bharatiya Nagarik Suraksha Sanhita, 2023 (formerly Section
+  91, CrPC)"`. Still flagged for legal sign-off before real use, per
+  `EXPLAINER.md` Part 10 — this is a correction to a known-stale citation,
+  not a claim of legal authority.
+- **No minimum recommendation score.** A VASP scoring ≤0 (e.g. Bitfinex 3
+  hops out: 0+0+1−3 = −2) was recommended with no distinction from a
+  healthy score. `lib/format.ts`'s new `lowActionabilityNote` renders a
+  visible warning next to the score on `/`, `/cases/[id]` and the PDF
+  instead — the arithmetic stays on screen either way (per `PLAN.md`'s
+  differentiation note), it just says plainly when the arithmetic itself
+  says "don't expect much."
+- **FAN_OUT counted contract-call edges.** Known and flagged since Day 3 as
+  a real but low-priority gap (`lib/typology.ts`'s own comment on
+  `FAN_OUT_MIN_DESTINATIONS`). Fixed: `destinations` now excludes
+  `isContractCall` edges before counting — a node that moved value to 4
+  places and made 3 zero-value calls elsewhere is 4 destinations, not 7.
+  Deliberately does **not** touch stored `typologyFlags` on existing cases;
+  only new traces use the corrected rule, same "don't retroactively change
+  what a past trace produced" stance the `FAN_OUT_MIN_DESTINATIONS` history
+  already set.
+- **Bitcoin change detection was too narrow.** `lib/blockstream.ts` treated
+  only a vout *back to the exact input address* as change; a vout to a
+  *different* co-spending input (equally provably the same wallet, via the
+  same common-input-ownership logic `lib/clustering.ts` already uses) still
+  drew as a hop, which could misfire `PEEL_CHAIN` on ordinary
+  multi-address-wallet change. Now: a non-CoinJoin tx's change is any vout
+  paying back to *any* of its own input addresses, not just the sender.
+- **Bitcoin/Tron fetchers had no pagination** — the long-documented
+  "~25/~50 most recent txs only" limitation (`DEMO_ADDRESSES.md`'s sweeper
+  warning, `ROADMAP.md`'s "smaller items"). Both now page up to 3 pages
+  (`MAX_PAGES`), but only *while a page produced zero outgoing transfers* —
+  an address that already sent recently costs exactly what it did before,
+  so the curated demo addresses' timing is unaffected; only a busy address
+  whose own sends are buried deeper pays the extra paced calls.
+- **Same-wallet attribution was direct-only.** `lib/clustering.ts`'s
+  `applyCoSpendAttribution` only linked a node straight to a *labeled*
+  co-spender. Added a second pass: transitive links (A co-spent with B, B
+  is itself attributed) propagate to a fixpoint, marked `coSpendVia` and
+  suffixed "(transitive)" — deliberately **never** given `coSpend`, so
+  `recommendVasp` can't route on it (there's no single tx between the
+  address and a *known* VASP address to cite in a request).
+
+**A bug the session's own work introduced and caught live, not in review:**
+the OFAC sync (below) blindly upserted every SDN row, and OFAC's own SDN
+list includes the seeded SamSam ransomware address — so the live sync
+downgraded its hand-verified `RANSOMWARE` label to the generic `SANCTIONED`
+one the moment it ran. Caught by checking the DB after the first live sync,
+not by inspection. Fixed: the sync now skips any address whose existing
+label isn't already `SANCTIONED` (create if absent, refresh if already
+`SANCTIONED`, otherwise leave the curated label alone), and reports the
+skip count. Verified live, twice: first sync (pre-fix) showed the
+downgrade; `prisma/seed.ts` re-run restored `RANSOMWARE`; second sync
+(post-fix) reported `0 new, 455 updated, 1 skipped, 456 total` and the DB
+confirmed the SamSam row still reads `RANSOMWARE`.
+
+**Smaller items:**
+
+- **Arbitrum exchange labels** — the one item the browser extension
+  connecting mid-session actually unblocked. Arbiscan's Cloudflare
+  challenge blocks `curl` but not a real browser with a short wait; three
+  labels added (`Binance 20`, `Binance`, `OKX 3`), each read from the page
+  directly, same provenance bar as every other seed entry. Bybit's hot
+  wallet was also confirmed but skipped — not in `vaspRegistry`, same call
+  Polygon's seed already made.
+- **"Exchange reached, not in the actionability registry."**
+  `lib/scoring.ts`'s `unregisteredExchanges` surfaces an exact or
+  same-wallet exchange match whose name has no `VaspRegistry` row (e.g. a
+  Bybit hit) instead of it silently vanishing from both the recommendation
+  and the "no VASP" empty state. Rendered on `/`, `/cases/[id]` and the PDF.
+- **Chain auto-switch.** The server already knew the right chain via
+  `detectChains`; `app/page.tsx` now switches the selector itself and shows
+  a one-line notice when a pasted address is invalid for the selected chain
+  but valid for exactly one other — an EVM `0x…` address (ambiguous across
+  three chains) still falls through to the server's own "which one did you
+  mean" error, deliberately not guessed.
+- **Tron/Bitcoin pagination** — listed under bugs above; same commits.
+
+**ROADMAP item 3 — issuer freeze paths, shipped.** New `IssuerRegistry`
+model (facts only, deliberately unscored — see its schema comment and the
+"unverified optimism worse than omitting" line in `ROADMAP.md` item 3),
+seeded with Tether and Circle from their own public statements (verified via
+WebFetch/WebSearch this session, sources cited in the seed). `issuerLeads`
+(`lib/scoring.ts`) surfaces every stablecoin symbol actually seen on a
+trace's edges, regardless of where the trace ended — the issuer can freeze
+independent of which exchange (if any) the funds reached. Rendered as its
+own block on `/`, `/cases/[id]` and the PDF. Verified live: a real depth-3
+trace of `0x1b8214682dee1c3d240e7241ef4e278854a2cdf3` showed both the USDT
+(Tether) and USDC (Circle) leads with the correct court-order distinction.
+
+**ROADMAP item 5 — live OFAC sanctions sync, shipped.** `lib/sanctions.ts`
+parses OFAC's public `SDN.CSV` export (RFC-4180-ish, no header) for
+`Digital Currency Address - <code>` remarks, keeping only currencies this
+tool traces (`XBT`→Bitcoin, `ETH`→Ethereum, `TRX`→Tron, `USDT`/`USDC`→both
+EVM and Tron) and validating each address against `lib/address.ts`'s own
+validators before accepting it. New `SANCTIONED` label/node kind (its own
+dark-red shade, distinct from `DARKNET`/`RANSOMWARE`; feeds `CRITICAL` risk
+the same way they do). `POST /api/admin/sync-sanctions`, SUPERVISOR-only,
+triggered from a button on `/cases`. Verified live twice (see the bug entry
+above): 456 crypto addresses across 3 chains, ~17s per sync (455 individual
+upserts, acceptable for a manual supervisor action, not a hot path).
+Self-check: `npx tsx lib/sanctions.test.ts`.
+
+**ROADMAP item 6 — address watchlist, shipped, deliberately no worker.**
+New `Watch`/`WatchAlert` models. `lib/watch.ts`'s `checkWatch` re-fetches one
+address's outgoing transfers (reusing the existing per-chain API clients,
+not the BFS tracer) and diffs against `lastSeenTimestamp`, creating an alert
+per new transfer with the destination's label if any. Three entry points, no
+in-app scheduler — `ROADMAP.md` is explicit that a worker is a real
+architecture cost this pass doesn't take on: a session-gated "Check now" per
+watch (`POST /api/watches/[id]/check`), a bearer-token bulk endpoint for an
+external cron/n8n (`POST /api/watches/check-all`, `WATCH_CRON_TOKEN`,
+excluded from `proxy.ts`'s session gate the same way the n8n ack routes are),
+and a minimal `/watches` page. Verified live: watching the WazirX headline
+address found zero alerts (correct — it moves nothing, per `ROADMAP.md` item
+0's finding); watching `0x1b8214…` found 10 real alerts, 9 correctly labeled
+`Binance 14`. Both demo watches were deleted afterward along with their
+alerts (`WatchAlert` doesn't cascade under the raw `sqlite3` CLI without
+`PRAGMA foreign_keys=ON` — cleaned up manually, worth remembering next time).
+
+**Smaller items beyond the roadmap's own list:**
+
+- **Chain of custody / audit log.** New append-only, hash-chained
+  `AuditEvent` model (`lib/audit.ts`) — each row's hash covers its own
+  content plus the previous row's hash, so an edited or deleted row breaks
+  every hash after it (tamper-*evident*, not tamper-*proof*: `dev.db` write
+  access still lets someone rewrite the whole chain, which the code comment
+  says plainly). Wired into login/login-failed, trace, view-case,
+  download-report, route-sahyog, vasp-response, draft-narrative,
+  watch-add/check and sanctions-sync. `app/cases/[id]/page.tsx` shows a
+  per-case timeline plus a whole-log chain-verify (`verifyAuditChain`) so a
+  broken link anywhere is visible, not just for this case's own rows.
+  Self-check: `npx tsx lib/audit.test.ts`. Verified live: the case page for
+  a real trace showed `#1 Ran trace`, `#2 Viewed case`, "hash chain intact."
+- **The `confirmedByVaspResponse` feedback loop** (unused since day 1) is
+  wired up: `POST /api/cases/[id]/vasp-response` records what a VASP
+  actually said (`CONFIRMED`/`DENIED`/`NO_RESPONSE`) on a routed case,
+  shown as three buttons on the case page. Deliberately does **not** write
+  back into `VaspRegistry.responseReliabilityScore` — that's a seeded,
+  hand-verified figure and one case's outcome shouldn't silently drift it.
+  `/cases` instead shows an observed response rate per VASP next to the
+  seeded score. Verified live: routed a real case, clicked "Confirmed —
+  disclosed," watched the dashboard's Binance line move from `0/3` to
+  `1/4` responded.
+- **LLM-drafted case narrative** — the one roadmap "smaller item" that
+  needed the Claude API skill's docs before writing anything (model id,
+  request shape). `POST /api/cases/[id]/narrative` sends only the
+  already-computed structured facts (risk level, flags, nodes,
+  recommendation — never raw trace JSON with room to improvise) to
+  `claude-opus-5` with a system prompt that says explicitly: state only
+  what the JSON says, never invent or override the risk/score/VASP. Stored
+  on `Case.narrativeDraft` so it isn't silently re-generated (real API
+  cost) on every page view. `ANTHROPIC_API_KEY` unset in this environment —
+  verified live that the route degrades to a clear 503 ("optional, never
+  blocks the rest of the app") rather than a raw SDK error, the same
+  graceful-degradation contract n8n's `notifyN8n` already uses.
+
+**Verification, live not simulated.** All five original self-checks plus
+the two new ones (`audit`, `sanctions`) pass; `tsc --noEmit` and `eslint .`
+clean; `next build` clean at **19 routes** (was 12 pre-phase-2). Two schema
+migrations applied (`20260914145502_add_phase2_features`,
+`20260914145908_add_vasp_response_and_narrative`), `dev.db` backed up
+before each (`dev.db.pre-phase2-migration` in the scratchpad, plus the
+existing `dev.db.pre-auth`/`dev.db.pre-evm-chains` in the repo root — none
+touched). `Case` count held at **89** throughout — the two test cases and
+two test watches this session created were deleted afterward, checked by
+`createdAt` against the session's own start time before deleting, per this
+file's and `HANDOFF.md`'s standing rule. Browser-verified end to end,
+logged in as both demo accounts: home page trace (USDT/USDC issuer leads,
+FAN_OUT+PEEL_CHAIN with the contract-call fix live), chain auto-switch on a
+Bitcoin address pasted with Ethereum selected, case detail page (chain of
+custody, narrative graceful-error, VASP-response feedback), PDF download
+(200, no console error), Sahyog routing (payload shows the new BNSS
+citation), `/cases` dashboard (response-rate rows, supervisor-only sync
+button), `/watches` (add, check, real alerts), sanctions sync (twice, to
+prove the SamSam-label bug and its fix). No stale service worker this
+session (`navigator.serviceWorker.controller` checked first, per the
+standing gotcha). Mobile check was partial: the browser tool's window
+couldn't go below ~560px on this display (tried 375px and 320px, both
+clamped), so `scrollWidth === clientWidth` was confirmed at ~546px but not
+at the usual 375px benchmark — worth a real 375px pass next session that
+has puppeteer or a narrower display.
+
+**Deliberately not attempted, both explained rather than silently
+dropped:**
+
+- **ROADMAP item 4 (bridge traversal).** Explored two real APIs
+  (`scan.layerzero-api.com` responds with real cross-chain message data by
+  tx hash; `wormholescan.io` and `across.to` also have working lookup
+  endpoints) — the ground-truth "follow one bridge message" premise in
+  `ROADMAP.md` holds, it's a real, tractable integration. Not built today:
+  it needs a bridge-detection step in the tracer, a per-bridge API adapter,
+  and a decision on how a resolved cross-chain hop renders without
+  claiming the tracer now crosses chains automatically (it wouldn't — this
+  would be a one-hop lookup, not a second tracer). Left as a scoped-but-
+  not-built item rather than a rushed integration on top of everything
+  else today.
+- **ROADMAP item 7 (mixer demixing).** Explicitly out of scope for this
+  session on purpose, not for lack of time alone: `ROADMAP.md` frames it as
+  a standalone experiment with a kill criterion (beat the anonymity-set
+  prior or don't ship) and a hard constraint that a correlated link must
+  never merge into the real edge set or feed the score. Building that
+  properly is its own session's work, not a bullet in a day that already
+  touched the tracer, the scoring, and the legal-output path — the
+  project's own stated risk ("a heuristic that routes a real disclosure
+  request is a worse failure than no feature") is exactly what rushing it
+  would risk.
+- **BSC and the other Etherscan-free-tier-refused chains, MCP server,
+  encryption at rest, SSO, multi-investigator collaboration** — all still
+  blocked on the same external inputs `ROADMAP.md` already named (a paid
+  Etherscan plan, a non-cookie credential path, and genuinely new
+  infrastructure respectively). Nothing changed about their status today.
+
+**Known follow-up, not a regression:** the VASP-response buttons and the
+narrative card on `/cases/[id]` only appear after the *next* page load
+following a Sahyog routing click — the page is a React Server Component, so
+`SahyogButton`'s client-side `routed` state flipping doesn't retroactively
+reveal server-rendered content gated on `kase.status`. Same pattern the
+page already had for everything else it server-renders; noted rather than
+silently worked around, since a proper fix (lifting routed state up, or a
+router refresh call) touches `SahyogButton` and is a small enough change to
+leave for a session with more room to verify it doesn't disturb the
+existing flow.
+
+### 2026-09-14 (session 3) — Money-tracking: received-in-trace, live balances, cross-case VASP inflow
+
+Asked "can we track how much money has gone to each wallet." Three distinct
+questions, asked and built together (user picked all three when offered the
+choice), each costed and scoped differently:
+
+- **Received within a trace — free, every node.** `lib/format.ts`'s new
+  `sumValuesByAsset`/`assetTotalsLabel` sum a node's incoming edges by asset
+  (no extra API calls — the tracer already fetched them);
+  `lib/tracers/bfs.ts` attaches the result as `TraceNode.receivedInTrace`.
+  Shown in the graph's node detail sheet and the PDF's hop narrative. Zero
+  totals are filtered out before they're even stored — a node reached only
+  via zero-value `CONTRACT_CALL` edges isn't "received" anything, and
+  showing "0.0000 ETH" would read as an observation instead of the absence
+  of one, the same mistake `ROADMAP.md` item 0 already fixed for edges
+  themselves.
+- **Each wallet's real balance/lifetime total — one extra paced call, scoped
+  to the root and LABEL_MATCH nodes only, not every intermediary.** New
+  `getNativeBalance` (Etherscan), `getAddressStats` (Blockstream),
+  `getAccountBalance` (Tronscan), wired through a new optional
+  `ChainAdapter.fetchStats`. **Deliberately asymmetric, and stated as such**:
+  Bitcoin gets a real `totalReceivedBaseUnits` (Blockstream's
+  `chain_stats.funded_txo_sum` indexes an address's entire confirmed
+  history, a genuine lifetime figure); Ethereum/Polygon/Arbitrum/Tron only
+  get `balanceBaseUnits` (current holdings) — none of their free-tier APIs
+  expose a real total-ever-received without paginating full history, and
+  claiming one would overstate what was actually observed, the same
+  discipline the CONTRACT_CALL/TRANSFER split already established. Both
+  fields are best-effort: a failed stats call leaves them unset rather than
+  failing the trace. Scoping to root+LABEL_MATCH (not every node) was a
+  deliberate cost decision, following `ROADMAP.md`'s own standing warning
+  that per-node API additions need measuring, not assuming — a typical
+  judged demo trace has 1-3 such nodes, not dozens.
+- **Money into each VASP, across every stored case — a new dashboard card,
+  not a per-trace figure.** `lib/scoring.ts`'s `aggregateReceivedByVasp`
+  parses every case's stored `traceResult` (a second O(all-cases) pass
+  alongside the existing typology-flag tally, same `ponytail:` cost note),
+  sums confirmed-transfer edges into each exact-label `EXCHANGE` node,
+  grouped by (VASP name, asset symbol) — **never blended into one dollar
+  figure**, since there's no live price feed here and inventing a
+  USD-equivalent would be exactly the kind of unverified figure
+  `IssuerRegistry` already refuses to produce. Same-wallet (co-spend)
+  matches are excluded — an inference isn't confirmed money to a VASP.
+  Rendered on `/cases` as its own card, next to the existing "Most-
+  recommended VASPs" chart.
+
+**Two real bugs the live dashboard check caught, not code review — both the
+same shape, both fixed the same way "a zero isn't an observation" was
+already fixed for edges and receivedInTrace:**
+
+- `aggregateReceivedByVasp` was originally summing `CONTRACT_CALL` edges
+  too, so a VASP reached only by zero-value calls (Kraken, in the live
+  data) printed "0.0000 ETH" — a payment of nothing, read as a payment.
+  Fixed by skipping `isContractCall` edges before summing.
+- Even after that fix, Kraken's row still showed "0.0000 ETH" — traced to a
+  **pre-2026-09-12 stored case** whose edge has no `kind` field at all
+  (back-compat reads it as `TRANSFER`, correctly, per the standing
+  contract) but whose stored `valueWei` is a literal `"0"` — a relic of the
+  same pre-fix phantom-edge behavior `ROADMAP.md` item 0 already documents.
+  Rather than special-case every historical reason a total could land on
+  exactly zero, `aggregateReceivedByVasp` now filters any `(vasp, symbol)`
+  total of exactly zero at the end, regardless of source. Verified by
+  direct DB query before and after: Kraken's row disappeared entirely (its
+  only total was zero), Bitbns's real `1.0000 TRX` and WazirX's real
+  `1220870.2687 TRX` stayed, and WazirX's own spurious `0.0000 ETH`
+  component (same root cause) disappeared alongside it.
+
+**Verified live, not simulated.** All 7 self-checks pass (new assertions in
+`lib/format.test.ts` for `sumValuesByAsset`/`assetTotalsLabel`/
+`formatAssetValue`/`formatBySymbol`, and in `lib/scoring.test.ts` for
+`aggregateReceivedByVasp` including the co-spend-exclusion and zero-total
+cases), `tsc --noEmit` and `eslint .` clean, `next build` clean. Three real
+traces run through the actual app: the WazirX headline address (confirmed
+`receivedInTrace` correctly *absent* — it only ever received zero-value
+calls — and a real root balance of 0.304 ETH); a Bitcoin trace on
+`1CRLGcaXajtWVF5EopZgQUqE12dKn8Rtuh` (confirmed a real non-zero
+`receivedInTrace` on an intermediary, a real root `totalReceivedBaseUnits`
+of 15,010 sats — a small dormant address, matches its `DEMO_ADDRESSES.md`
+description — and a real **15,654.68 BTC** lifetime total on the Binance
+exchange node, a plausible figure for a major exchange hot wallet); and the
+`/cases` dashboard's new card, checked before and after the zero-total fix
+via a direct query against the live DB (`aggregateReceivedByVasp` run
+against all stored cases through a throwaway script, deleted after). PDF
+verification was partial: `GET /api/cases/[id]/report` returned 200 with no
+server error for a case carrying all three new fields, but the actual
+downloaded file's text wasn't inspected — the browser tool's download
+didn't save this session (a repeat of the known `renderToBuffer`-under-raw-
+`tsx` limitation meant a throwaway script couldn't render it either,
+documented in this file's 2026-09-07 entry). Worth a `pdftotext` pass next
+session that can actually save the download. The three test cases created
+during this verification (`cmu1hqpb9…`, `cmu1hri5h…`, `cmu1hsxcl…`) were
+deleted afterward, checked by `createdAt` first — the count was 98 at the
+end, not 89: the user ran 9 real traces of their own between sessions,
+correctly left untouched.
+
+**Deliberately not done:** no USD/blended-currency total anywhere (no live
+price feed, and estimating one risks the exact "invented figure" this
+project's honesty discipline exists to prevent); no balance/received data
+for plain intermediary nodes (cost-scoped to root+LABEL_MATCH, see above);
+no token (stablecoin) balance fetching for item 2 — only native currency,
+since Etherscan's balance endpoint is native-only and adding per-token
+balance calls would reopen the same per-node-cost question `ROADMAP.md`
+already flags for items 1 and 2.
+
 ## Next up
 
-**Updated 2026-09-14:** item 2 is done. Same-wallet exchange matches route
+**Updated 2026-09-14 (session 3):** Money-tracking (received-in-trace, live
+balances/totals, cross-case VASP inflow) is done — see the entry directly
+above. Next real candidates unchanged from session 2: `ROADMAP.md` item 4
+(bridge traversal, scoped) or one of the smaller open items (BSC, MCP
+server, encryption at rest).
+
+**Updated 2026-09-14 (session 2):** `ROADMAP.md` items 3, 5 and 6 are done.
+Item 4 (bridge traversal) is scoped and two real bridge-lookup APIs are
+confirmed working, but not built. Item 7 (mixer demixing) stays explicitly
+parked — see the entry above for why. Next real candidates: item 4, or one
+of the "smaller items" still open (BSC, an MCP server, encryption at rest).
+
+**Updated 2026-09-14 (earlier):** item 2 is done. Same-wallet exchange matches route
 as ownership-confirmation requests. Item 3 (issuer freeze paths) is next.
 
 **Updated 2026-09-13:** `ROADMAP.md` items 0 and 1 have both shipped. Item 2

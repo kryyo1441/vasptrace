@@ -6,6 +6,13 @@ points here for priority order; `PLAN.md` is the frozen 5-day brief and is not
 a roadmap. Don't fork a second list — this repo already has a scar from a
 duplicated brief going stale (`~/code/CLAUDE.md` exists only because of that).
 
+**Status as of 2026-09-14 (session 2):** items 0-3, 5 and 6 are shipped.
+Item 4 (bridge traversal) is scoped, with two real APIs confirmed working,
+but not built — see its section. Item 7 (mixer demixing) is the one item
+still deliberately untouched, per its own kill-criterion framing. See
+`PROGRESS.md`'s 2026-09-14 session 2 entry for the full changelog, bugs
+fixed alongside these items, and what's explicitly not attempted.
+
 ## The ranking principle
 
 Every item below is either a **hard on-chain fact** or a **probabilistic
@@ -19,17 +26,22 @@ sits outside the ranking: it's a semantics decision about what an edge
 
 ## Two constraints that apply to everything below
 
-- **Schema work doubles across two diverged branches.** `day3-n8n-rehearsal`
-  is SQLite, `vercel-postgres` is Prisma Postgres, and they have already
-  diverged enough to break a build on branch switch (see `PROGRESS.md`,
-  2026-09-12). Any item here that touches `prisma/schema.prisma` costs two
-  migrations and two verifications. **Reconcile the branches before starting
-  phase-2 schema work**, or pick one and declare the other dead.
+- **Schema work doubles across two diverged branches — status changed
+  2026-09-14.** `day3-n8n-rehearsal` is SQLite, `vercel-postgres` is Prisma
+  Postgres. They were never reconciled, but `main` was fast-forwarded onto
+  `day3-n8n-rehearsal` 2026-09-14 (it was 52 commits behind, 0 ahead — a
+  clean fast-forward, no branch surgery needed) and phase-2 schema work
+  (items 3/5/6 above) landed on `day3-n8n-rehearsal` anyway, via two more
+  migrations there. `vercel-postgres` was deliberately left untouched and is
+  now further behind than before — reconcile it (or declare it dead, which
+  is looking like the honest call) before ever building on it again.
 - **More API calls per node fights `withPacing`.** Pacing serializes one call
   per chain, a deep trace already measures ~25s (`HANDOFF.md` item 0), and
   raising `NODE_BUDGET` was measured and rejected. Items 1 and 2 both add
   calls *per node*, so both need a measured timing number before they land,
-  not an estimate.
+  not an estimate. Items 5 and 6 (both shipped 2026-09-14) don't touch this:
+  the sanctions sync fetches one CSV, not a per-node call, and watch checks
+  are one address's worth of work per check, not a trace.
 
 ---
 
@@ -344,25 +356,44 @@ cheaply enough to cluster during a trace rather than in a prepass; the extra
 call cost per node; and how a cluster renders without making the graph lie
 about which specific address actually transacted.
 
-## 3. Actionable-entity registry — issuer freeze paths
+## 3. Actionable-entity registry — issuer freeze paths — SHIPPED 2026-09-14
 
-**What.** Generalize `VaspRegistry` beyond exchanges. Stablecoin issuers
-(Tether, Circle) freeze addresses at law-enforcement request, so for
-USDT-denominated flows the actionable party may be the **issuer**, not the
-exchange the funds reached.
+### What shipped
 
-**Why.** This extends the project's actual differentiator — *who in India can
-make someone answer* — rather than adding generic tracing capability. It is
-also the natural payoff of item 1 and is meaningless before it: there is no
-issuer to act against until the tracer can see token flows at all.
+A sibling model, not a `VaspRegistry` generalization (the "to verify"
+question below): `IssuerRegistry` (`symbol`, `issuerName`, `freezeProcess`,
+`requiresCourtOrder`, `sourceUrl`) — deliberately **not scored** on
+`VaspRegistry`'s formula, since no India-specific channel or reliability
+figure for either issuer is publicly verifiable, and inventing one would be
+exactly the "unverified optimism worse than omitting it" this item warned
+against. Seeded with Tether and Circle from their own public statements
+(WebFetch/WebSearch, cited in `prisma/seed.ts`): Tether says it works with
+340+ agencies in 65+ countries and freezes on a direct law-enforcement
+request, no court order documented as required; Circle freezes only "at the
+direction of law enforcement or the courts" — a binding order. Neither has a
+publicly documented India-specific process.
 
-**To verify.** The documented request routes for Indian LEAs to Tether/Circle
-and their realistic response characteristics (the registry's whole point is
-honest reliability scoring, so unverified optimism here would be worse than
-omitting it); whether `VaspRegistry` generalizes cleanly or wants a sibling
-model.
+`lib/scoring.ts`'s `issuerLeads(edges, issuerRegistry)` surfaces every
+stablecoin symbol that actually appeared on a trace's edges, independent of
+where the trace ended — the issuer can freeze regardless of which exchange
+(if any) the funds reached, so this runs alongside `recommendVasp`, not
+conditioned on it. Rendered as its own block on `/`, `/cases/[id]` and the
+PDF (`components/vasp-rec-line.tsx`'s `IssuerLeads`,
+`lib/pdf/report.tsx`'s new section).
 
-## 4. Bridge traversal
+**Verified live:** a real depth-3 trace of `0x1b8214682dee1c3d240e7241ef4e278854a2cdf3`
+(the Binance/USDT demo address) showed both the USDT and USDC leads with the
+correct court-order distinction, on the page and matching the trace's actual
+assets — no issuer name appears for a trace that never touched that asset.
+
+**Still open:** no India-specific request route for either issuer is
+publicly documented, so the seeded text says that plainly rather than
+guessing one. `VaspRegistry` generalization was considered and rejected — a
+different institution type (asset issuer vs. custodial exchange) with a
+different, unscored process is a cleaner model than forcing both through one
+schema.
+
+## 4. Bridge traversal — scoped 2026-09-14, not built
 
 **What.** `LabelType.BRIDGE` already exists in the schema and today only
 produces a placeholder — the trace stops and asks for manual correlation.
@@ -373,38 +404,106 @@ following one is a lookup, not an inference.
 what separates it from mixer demixing. Already promised as roadmap in
 `PITCH.md` §12 and `PLAN.md`'s out-of-scope list.
 
-**To verify.** Which bridges expose a public message-lookup API, and whether
-any single aggregator covers enough of them to be worth one integration
-instead of N.
+**Verified working, not yet wired in.** Three real message-lookup APIs
+responded correctly to a live probe: `scan.layerzero-api.com/v1/messages/tx/<hash>`
+returned real pathway data (source/dest chain, sender/receiver) for a known
+LayerZero message and a clean 404-shaped "not found" for a made-up hash;
+`api.wormholescan.io` and `app.across.to`'s deposit-status endpoint both
+responded in the same well-formed way. So the premise holds — this is a real,
+tractable lookup, not a research problem.
 
-## 5. Live label / sanctions sync
+**Why it still isn't built.** Three things this session didn't have room for
+once the constraints below were factored in: (1) a bridge-*detection* step —
+today `BRIDGE` is a label type nothing seeds an address as, so the tracer
+needs to recognize a bridge contract before it knows which API to call; (2)
+one adapter per bridge family (LayerZero-message vs. Wormhole-VAA vs.
+Across-deposit are three different request/response shapes, not one); (3) a
+rendering decision — a resolved cross-chain hop must read as "the message
+proves the funds landed on chain X at address Y," a one-hop fact, not as the
+tracer silently continuing to trace on a second chain (that would be a much
+bigger claim than this item asks for). None of the three is hard on its own;
+doing all three carefully in the same session as the tracer/scoring/legal-
+output changes above risked the "rushed integration" failure mode this
+project's own review culture keeps catching elsewhere.
 
-**What.** OFAC publishes machine-readable SDN data; the labeled-address DB is
-currently a point-in-time seed (`prisma/seed.ts`) that ages silently.
+**To verify, before building:** which bridge each of this app's seeded/
+demo-relevant BRIDGE-worthy contracts actually is (LayerZero OFT is the most
+relevant given USDT0 is already traced on Polygon/Arbitrum — see item 1); the
+exact response shape for a *found* message (only a not-found shape was
+probed); and how a resolved hop's fact should be labeled in the disclosure
+payload alongside `evidenceTrail`, so this doesn't repeat item 0's "grep
+every consumer of edges" lesson from the other direction.
 
-**Why.** Low effort, and it removes a slow-rotting correctness problem — a
-seeded label is a claim about the world that was true when it was written. The
-seed's existing bar (never add a label without verifying it) should carry over
-to whatever syncs it.
+## 5. Live label / sanctions sync — SHIPPED 2026-09-14
 
-**To verify.** The SDN feed's crypto-address field shape and update cadence,
-and *where a scheduled refresh runs* — neither branch currently has anywhere
-to put a recurring job (see item 6).
+### What shipped
 
-## 6. Watchlists / monitoring — highest operational value, biggest architectural cost
+`lib/sanctions.ts` parses OFAC's public `SDN.CSV` export directly (no header
+row; a small RFC-4180-ish splitter handles quoted fields with embedded
+commas) for `Digital Currency Address - <code>` remarks, keeping only the
+currencies this tracer follows: `XBT`→Bitcoin, `ETH`→Ethereum, `TRX`→Tron,
+`USDT`/`USDC`→both EVM and Tron (an issuer-listed address isn't chain-scoped
+by OFAC, so both are labeled — see the `ponytail:` note in the code for the
+one place this over-reaches: an ETH-listed key also controls Polygon/
+Arbitrum, but only the Ethereum label is written). Every parsed address is
+re-validated against `lib/address.ts`'s own format checks before being
+trusted, so a malformed remarks field can't silently mislabel something.
 
-**What.** Subscribe to an address and alert when it moves, instead of one-shot
-retrospective traces.
+New `SANCTIONED` label type and graph node kind (`#991b1b`, distinct from
+`DARKNET`/`RANSOMWARE`'s `#7f1d1d`), feeding `CRITICAL` risk the same way
+those two already do. `POST /api/admin/sync-sanctions`, SUPERVISOR-only,
+triggered from a button on `/cases` — no scheduled job, per this item's own
+"neither branch has anywhere to run one" note; a supervisor runs it by hand.
 
-**Why.** A disclosure request is retrospective; an alert fired when funds land
-on an exchange deposit address is actionable **while the money is still
-there**. For the LEA use case that is the difference between tracing and
-freezing — arguably the highest-value idea on this list.
+**A real bug the first live run caught, not code review:** a blind upsert
+overwrote the seeded SamSam ransomware address's hand-verified `RANSOMWARE`
+label with the generic `SANCTIONED` one, since OFAC's own SDN list also
+carries that address (true — it's the same designation `prisma/seed.ts`
+already cites). Fixed: the sync now skips any address whose existing label
+isn't already `SANCTIONED` — create if absent, refresh if already
+`SANCTIONED`, otherwise leave the curated label alone and count it as
+skipped. Verified live, twice: the pre-fix sync's downgrade was visible in
+`dev.db`; `prisma/seed.ts` restored `RANSOMWARE`; the post-fix sync reported
+`0 new, 455 updated, 1 skipped, 456 total` and the row held.
 
-**Why it isn't ranked higher.** It needs a worker/queue and somewhere to run
-it. That's an architecture change, not a feature, and neither branch can host
-it today (n8n can't follow the app to Vercel either — `HANDOFF.md` item 6).
-Sequence it after the branch reconciliation in the constraints above.
+**Measured:** 456 crypto addresses across the 3 traced chains as of
+2026-09-14 (252 Bitcoin, 113 Tron, 91 Ethereum), ~17 seconds per sync (455
+sequential `findUnique` + `upsert` pairs — acceptable for a manual,
+supervisor-triggered action, explicitly not a hot path; batching would be
+the first thing to change if this ever ran on a schedule). Self-check:
+`npx tsx lib/sanctions.test.ts`.
+
+**Still open:** a real scheduled refresh (see item 6's own note — still no
+recurring-job host); the SDN feed's update cadence wasn't measured, only its
+current shape.
+
+## 6. Watchlists / monitoring — SHIPPED 2026-09-14 (no worker, by design)
+
+### What shipped
+
+The architecture cost named below was real, and this ships *without* paying
+it: new `Watch`/`WatchAlert` models, `lib/watch.ts`'s `checkWatch(watch)`
+re-fetches one address's outgoing transfers directly through the existing
+per-chain API clients (not a second BFS tracer) and diffs against
+`lastSeenTimestamp`, writing one `WatchAlert` per new transfer with the
+destination's label (if any) attached. No in-app scheduler anywhere — three
+entry points instead: a session-gated "Check now" per watch
+(`POST /api/watches/[id]/check`), a bearer-token bulk endpoint for an
+external cron or n8n (`POST /api/watches/check-all`, `WATCH_CRON_TOKEN`,
+excluded from `proxy.ts`'s session gate the same way the n8n ack routes
+already are), and a minimal `/watches` page to add/list/check.
+
+**Verified live:** watching the WazirX headline address (`0x6eedf92f…`)
+found zero new alerts on check — correct, per `ROADMAP.md` item 0's finding
+that this address moves neither ETH nor tokens. Watching
+`0x1b8214682dee1c3d240e7241ef4e278854a2cdf3` found 10 real alerts, 9 of them
+correctly labeled `→ Binance 14`. Both demo watches were deleted afterward.
+
+**Still open, exactly as this item originally flagged:** there is still no
+recurring-job host on either branch — a real deployment needs an actual
+scheduler pointed at `/api/watches/check-all`, this item doesn't invent one.
+`lib/sanctions.ts` (item 5) would use the same missing piece for a scheduled
+refresh.
 
 ## 7. Mixer demixing lab — approved experiment, honestly reframed
 
@@ -453,31 +552,70 @@ heuristics are actually reproducible from public data.
 
 ## Smaller items, not ranked
 
-- **More chains (partly done 2026-09-13).** Polygon and Arbitrum shipped on
-  the Etherscan v2 adapter (`PROGRESS.md`, 2026-09-13). Open: **Arbitrum
-  exchange labels** (none seeded, since Arbiscan can't be read by a script;
-  verify by hand to the seed's bar), and **BSC / Base / Optimism /
-  Avalanche**, which are the same code plus an allowlist entry each but are
-  refused by Etherscan's free tier. BSC matters most (USDT-BEP20 is a real
-  fraud rail), so that's a paid-plan decision. Non-EVM chains (Solana etc.)
-  each need a new API client and address format.
+- **More chains (partly done 2026-09-13, Arbitrum labels done 2026-09-14).**
+  Polygon and Arbitrum shipped on the Etherscan v2 adapter (`PROGRESS.md`,
+  2026-09-13). **Arbitrum exchange labels**: three seeded 2026-09-14
+  (Binance ×2, OKX) — Arbiscan's Cloudflare challenge blocks `curl` but not a
+  real browser session with a short wait, which is how these were finally
+  read; Bybit's hot wallet was also confirmed but skipped, not in
+  `vaspRegistry`. Still open: **BSC / Base / Optimism / Avalanche**, same
+  code plus an allowlist entry each but refused by Etherscan's free tier.
+  BSC matters most (USDT-BEP20 is a real fraud rail), so that's a paid-plan
+  decision. Non-EVM chains (Solana etc.) each need a new API client and
+  address format.
 
-- **Audit log / chain of custody** — already promised in `PITCH.md` §12 and
-  named as a known gap in `ARCHITECTURE.md`. For a tool whose output is meant
-  to support legal process, "who ran what, when, and what did the report say
-  at the time" is a credibility feature, not a nice-to-have.
-- **LLM-drafted case narrative** — plausible use of current tooling *only*
-  under one hard constraint: it drafts prose from the already-computed
-  structured trace and never touches the score, the risk level, or the
-  recommendation. Those stay rule-based and auditable. An LLM that decides
-  risk would delete the project's entire differentiation story.
-- **MCP server exposing the trace tool** — the API routes already exist, so
-  wrapping them lets an investigator drive a trace from an agent. Cheap; do it
-  only once auth can issue a non-browser credential, since the current session
-  model is a signed browser cookie.
-- **`confirmedByVaspResponse` feedback loop** — the unused field from day 1
-  (`PLAN.md`, out-of-scope list). Only becomes meaningful with real VASP
-  responses, so it stays parked.
+- **Audit log / chain of custody — SHIPPED 2026-09-14.** Append-only,
+  hash-chained `AuditEvent` (`lib/audit.ts`) — each row's hash covers its own
+  content plus the previous row's hash, so an edited or deleted row breaks
+  every hash after it. Tamper-*evident*, not tamper-*proof*, stated plainly
+  in the code: `dev.db` write access still lets someone rewrite the whole
+  chain; anchoring the head hash somewhere external is the real upgrade.
+  Wired into every action with legal or investigative weight (login, trace,
+  view/download/route/respond on a case, watch add/check, sanctions sync).
+  `/cases/[id]` shows the case's own timeline plus a whole-log chain-verify.
+  Self-check: `npx tsx lib/audit.test.ts`.
+- **LLM-drafted case narrative — SHIPPED 2026-09-14.**
+  `POST /api/cases/[id]/narrative` sends only the already-computed
+  structured facts (risk level, flags, nodes, recommendation) to
+  `claude-opus-5`, with a system prompt that states the hard constraint
+  explicitly: never invent or override the risk, score, or recommendation.
+  Stored on `Case.narrativeDraft` so it's not silently re-generated on every
+  view. `ANTHROPIC_API_KEY` unset in dev — verified the route degrades to a
+  clear 503 rather than a raw SDK error, same contract `lib/n8n.ts` already
+  uses for its own optional dependency.
+- **MCP server exposing the trace tool** — still blocked exactly as stated:
+  auth can't yet issue a non-browser credential (the session model is a
+  signed browser cookie). The new `WATCH_CRON_TOKEN` bearer-token pattern on
+  `/api/watches/check-all` is the same *shape* of fix, scoped to one route —
+  worth reusing the pattern for an MCP-facing token rather than inventing a
+  second auth mechanism, but the MCP server itself isn't built.
+- **`confirmedByVaspResponse` feedback loop — SHIPPED 2026-09-14.** The
+  unused field from day 1 now records what a VASP actually answered
+  (`CONFIRMED`/`DENIED`/`NO_RESPONSE`, entered by the investigator on the
+  case page after routing). Deliberately does **not** write back into
+  `VaspRegistry.responseReliabilityScore` — that stays a seeded,
+  hand-verified figure; `/cases` shows the observed rate next to it instead,
+  never overwriting it. Verified live: routing a case and marking it
+  confirmed moved the dashboard's per-VASP line from `0/3` to `1/4`.
+- **Money tracking — SHIPPED 2026-09-14, not originally a roadmap item.**
+  User-requested ("can we track how much money has gone to each wallet").
+  Three separate answers, each costed differently: (1) received-in-trace —
+  free, every node, summed from edges the trace already fetched; (2) live
+  wallet balance — one extra paced call, scoped to the suspect root and
+  labeled nodes only, never every intermediary (the same per-node-cost
+  discipline items 1/2 above are held to); Bitcoin alone gets a real
+  lifetime total-received figure, since Blockstream indexes full history and
+  Etherscan/Tronscan's free tiers don't; (3) money into each VASP across
+  every stored case — a new `/cases` card, grouped by VASP and asset symbol,
+  never blended into one dollar figure (no live price feed anywhere in this
+  app). Two real bugs, both the "a zero-value contract call isn't a
+  payment" shape item 0 already established, caught by checking the live
+  dashboard rather than assumed correct: a `CONTRACT_CALL` edge was being
+  summed as money received, and a pre-2026-09-12 stored case's literal-zero
+  edge slipped through even after that fix. Both fixed by filtering zero
+  totals at the source. Self-checks extended in `lib/format.test.ts` and
+  `lib/scoring.test.ts`. Full write-up: `PROGRESS.md`'s "session 3" entry;
+  `EXPLAINER.md` Feature 18.
 
 ## What is deliberately not here
 

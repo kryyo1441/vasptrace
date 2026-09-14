@@ -79,6 +79,18 @@ Built solo in 5 days for Smart India Hackathon, problem statement 26182
 blockchain-intelligence tool doesn't have, because it's specific to how
 Indian crypto regulation and I4C actually work.
 
+**Since submission (phase 2, through 2026-09-14):** the tracer gained
+stablecoin flows and Bitcoin common-input clustering; item 2's actionability
+story extended to stablecoin issuers (Tether/Circle can freeze independent
+of which exchange the funds reached) and a live OFAC sanctions sync; and the
+platform gained a hash-chained chain-of-custody log, an address watchlist,
+and real money-tracking — how much a node received within a trace, a
+wallet's live balance (Bitcoin's own indexed history even gives a genuine
+lifetime total), and how much has flowed into each VASP across every case
+ever traced, never blended into a fake dollar figure since there's no price
+feed anywhere in this app. All real, all covered in `ROADMAP.md` and
+`PROGRESS.md` — none of it changes the core pitch, it deepens the same one.
+
 ---
 
 ## 3. Architecture
@@ -143,7 +155,7 @@ project convention, enforced from day one.
 | Piece | Status |
 |---|---|
 | Ethereum / Polygon / Arbitrum / Bitcoin / Tron tracers | **Live** — real public block-explorer APIs, zero synthetic data. Scope (updated 2026-09-13): native transfers **plus allowlisted stablecoins** — USDT/USDC on the EVM chains, USDT on Tron; other tokens not followed. Edges are typed `TRANSFER` vs `CONTRACT_CALL`, so a zero-value contract call is never shown, counted or cited as a payment |
-| Labeled address DB, VASP registry | **Live** — real, individually source-checked public data (16 VASPs, 31 labeled addresses: 28 exchange, 2 mixer, 1 ransomware; 13 of the exchanges are Polygon, none yet on Arbitrum) |
+| Labeled address DB, VASP registry, issuer registry | **Live** — real, individually source-checked public data (16 VASPs, 34 labeled addresses: 31 exchange, 2 mixer, 1 ransomware; 13 of the exchanges are Polygon, 3 Arbitrum; 2 stablecoin issuers). Plus **456 OFAC-sanctioned addresses**, live-synced from the real SDN feed (2026-09-14) |
 | Legal-actionability scoring | **Live** — real arithmetic over the seeded registry, score breakdown shown on screen, not a black box |
 | Confidence clustering | **Live** — real graph-structural heuristics (forward-ratio, fan-in), not AI/ML |
 | Typology flags | **Live** — real rule-based pattern detection over the traced graph |
@@ -375,10 +387,11 @@ not just that it works.
 
 - **5 chains** traced live: Ethereum, Polygon, Arbitrum, Bitcoin, Tron (3 at
   submission; Polygon/Arbitrum added 2026-09-13, Arbitrum without labels yet)
-- **16 VASPs** in the legal-actionability registry, **31** individually
+- **16 VASPs** in the legal-actionability registry, **34** individually
   source-verified labeled addresses (exchanges, mixers, a ransomware
-  address — 18 at submission, plus 13 Polygon exchange wallets)
-- **82 real cases** traced during development and demo rehearsal — not a
+  address — 18 at submission, plus 13 Polygon and 3 Arbitrum exchange
+  wallets), plus **456 live-synced OFAC-sanctioned addresses**
+- **98 real cases** traced during development and demo rehearsal — not a
   handful of cherry-picked screenshots
 - **10/10** original plan items shipped with a working first pass by day 1,
   hardened through day 4 — plus auth and RBAC, added after the fact when a
@@ -393,36 +406,27 @@ not just that it works.
 Deliberately out of scope for a 5-day build, kept as credible next steps
 rather than vague hand-waving. **The engineering detail, ranked with
 verification notes, lives in [`ROADMAP.md`](./ROADMAP.md)** — this section is
-the short pitch-facing version of it.
+the short pitch-facing version of it. **Updated 2026-09-14: token tracing,
+Bitcoin clustering, issuer freeze paths, live sanctions sync, and an address
+watchlist have all since shipped** — see below. What's genuinely still ahead:
 
-- **Token and stablecoin tracing** — the tracer currently follows native
-  transfers only (ETH, BTC, TRX), not ERC-20/TRC-20. Since USDT-TRC20 is the
-  rail most Indian investment-fraud proceeds actually move on, this is the
-  single biggest capability gap and the top of the roadmap.
-- **Issuer freeze paths** — stablecoin issuers freeze addresses at
-  law-enforcement request, so for USDT flows the actionable party may be the
-  issuer rather than the exchange. This is the same legal-actionability
-  question §3 already answers for VASPs, applied one layer further.
-- **Bitcoin entity clustering** — common-input-ownership, so labels resolve
-  to wallets rather than single addresses.
 - **Cross-chain bridge correlation** — following a suspect's funds across a
-  bridge from one chain to another, not just within a single chain.
+  bridge from one chain to another, not just within a single chain. Scoped
+  2026-09-14: two real bridge-message-lookup APIs (LayerZero, Wormhole) are
+  confirmed working, so this is a real integration, not a research problem —
+  just not built yet.
 - **Real Sahyog/I4C API integration**, once one is publicly available —
   the mock payload is already shaped to match what that integration would
   need.
-- **Address monitoring and alerts** — today's trace is retrospective; an
-  alert when funds reach an exchange deposit address is actionable while the
-  money is still there.
 - **ML-assisted typology detection** as a second opinion alongside the
   current rule-based heuristics, kept explicitly separate and labeled so
   the transparency story doesn't regress.
-- **Multi-investigator case collaboration** — shared case notes, and an
-  audit log of who viewed or routed what. Auth and role-based access are
-  already built (§2, §4); the audit trail on top of them is the next step.
+- **Multi-investigator case collaboration** — shared case notes. Auth and
+  role-based access are already built (§2, §4), and so, since 2026-09-14, is
+  a hash-chained audit log of who viewed or routed what — case notes on top
+  of both is the remaining piece.
 - **Encryption at rest** for the case database, plus SSO instead of local
   credentials — both needed before any real multi-tenant LEA deployment.
-- **Live OFAC/sanctions-list sync** for the labeled-address DB instead of a
-  point-in-time seed.
 
 ---
 

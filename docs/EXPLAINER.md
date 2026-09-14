@@ -15,6 +15,16 @@ Every number in this document (thresholds, weights, caps) was read out of the
 actual source code, not from other docs, and the file it lives in is named
 next to it so you can check.
 
+**Written pre-phase-2; updated in place as phase-2 shipped** (search
+"2026-09-14" for every touch point — corrected facts this doc originally got
+wrong at submission time, and new Part 5 features for everything phase-2
+added: Bitcoin common-input clustering folded into Feature 4, and Features
+12-18 covering issuer freeze paths, live OFAC sync, the address watchlist,
+the chain-of-custody log, the VASP-response feedback loop, the LLM-drafted
+narrative, and money-tracking). `docs/ROADMAP.md` and `docs/PROGRESS.md`
+remain the dated, decision-by-decision record if you want the "why," not
+just the "what."
+
 ---
 
 ## Contents
@@ -429,12 +439,16 @@ VASPtrace's routing is **simulated** and labeled as such everywhere.
 information — here, "tell us which customer controls the account that received
 funds at this address." It's the concrete output VASPtrace is built to support.
 
-**Section 91, CrPC.** The legal provision VASPtrace cites as the basis for its
-disclosure request (`LEGAL_BASIS` in `lib/format.ts`). Section 91 of India's
-Code of Criminal Procedure let police summon a person to produce a document.
-*Heads-up:* the CrPC was replaced on 1 July 2024 by the **Bharatiya Nagarik
-Suraksha Sanhita (BNSS)**, whose equivalent provision is Section 94. See
-Part 10 — this should be confirmed by someone with legal training.
+**Section 94, BNSS (formerly Section 91, CrPC).** The legal provision
+VASPtrace cites as the basis for its disclosure request (`LEGAL_BASIS` in
+`lib/format.ts`). India's Code of Criminal Procedure let police summon a
+person to produce a document under Section 91; the CrPC was replaced on 1
+July 2024 by the **Bharatiya Nagarik Suraksha Sanhita (BNSS)**, whose
+equivalent "summons to produce document or other thing" provision is
+Section 94 — fixed 2026-09-14 (was still citing the repealed CrPC section;
+see Part 10). Still worth confirming with someone with legal training before
+any real use — this is a correction to a known-stale citation, not a claim
+of legal authority.
 
 **FIU-IND (Financial Intelligence Unit – India).** The national agency, under
 the Ministry of Finance, that receives and analyzes reports of suspicious
@@ -474,8 +488,9 @@ address.
 global AML standards; it coined the term "VASP." India is a member.
 
 **Chain of custody.** The documented record of who handled evidence, when,
-and what they did — what lets evidence stand up in court. VASPtrace doesn't
-have an audit log yet (Part 10), which is the missing piece here.
+and what they did — what lets evidence stand up in court. VASPtrace has one
+since 2026-09-14: an append-only, hash-chained log of every trace, view,
+download, route and response. See Feature 15 in Part 5.
 
 ### F. Investigation and graph concepts
 
@@ -888,8 +903,10 @@ be, but it is not a payment, and VASPtrace is careful not to call it one.
 
 ## Part 5 — Every feature, intricately
 
-The ten features are numbered as in the original brief (`docs/PLAN.md`), plus
-auth, which was added later.
+Features 1-10 are numbered as in the original brief (`docs/PLAN.md`).
+Feature 11 (auth) was added after submission but still pre-phase-2. Features
+12-18 are everything phase-2 added, 2026-09-14 — see `docs/ROADMAP.md` for
+the dated decision record behind each.
 
 ### Feature 1 — Multi-chain transaction tracer
 
@@ -1129,6 +1146,43 @@ Details that matter:
 as a hacker and a phishing address — neither in VASPtrace's labels. The
 heuristic found genuinely suspicious consolidation behavior from shape alone.
 
+**Bitcoin common-input ownership, added 2026-09-14 (also medium).** A
+different rule, Bitcoin-only, riding on the same "medium" tier: **if two
+addresses are ever spent as inputs to the same transaction, one wallet
+controls both** (see the glossary's common-input-ownership entry — you need
+every input's private key to sign a transaction, so appearing together
+proves shared control). `lib/blockstream.ts` already fetches the data this
+needs for free — Esplora's per-transaction response lists every input's own
+address — so this costs **zero extra API calls**. `lib/clustering.ts`'s
+`applyCoSpendAttribution` checks whether an unlabeled node ever co-spent
+with a *labeled* address; if so, it inherits that label's name (suffixed
+"— same wallet") at medium confidence, with the transaction hash as proof. A
+second pass links transitively (A co-spent with B, B is itself attributed)
+but marks those `coSpendVia` instead — deliberately **never** routable,
+since there's no single transaction directly linking A to a *known* VASP
+address to cite in a legal request.
+
+**The CoinJoin exception.** A CoinJoin transaction deliberately mixes many
+unrelated people's inputs into one transaction specifically to defeat this
+rule (see the glossary). `isLikelyCoinJoin` checks for the tell — several
+input owners, several equal-value outputs (the mixed denomination) — and
+skips attribution on any transaction that looks like one. It's a shape
+heuristic, not a certainty: it catches the common Wasabi/Whirlpool style but
+would miss a more careful PayJoin, so it can only produce a **missed**
+attribution, never a false one.
+
+**Routes a request, with different wording.** Same-wallet exchange matches
+were made routable (user decision, 2026-09-14) — a Bitcoin trace that never
+finds an *exact* labeled exchange but does co-spend with one now still
+produces a recommendation. But the request it generates is deliberately
+different: `requestType: OWNERSHIP_CONFIRMATION_AND_DISCLOSURE_REQUEST`
+instead of a plain disclosure request, and the email draft asks the VASP to
+**confirm** the address is theirs before disclosing anything — it never
+asserts ownership as fact. The button itself reads "Route ownership-
+confirmation request," not "Route disclosure request." Every place the
+recommendation appears (the results page, the case page, the PDF) names it
+as an inference and shows the evidence transaction.
+
 ### Feature 5 — Graph visualization
 
 **What it solves.** A list of transactions is unreadable at scale; a map of
@@ -1308,8 +1362,9 @@ demonstrates the exact payload a real integration would send.
      "suspectAddress": "0x6eedf92f…",
      "chain": "ETHEREUM",
      "targetVasp": "WazirX",
+     "attribution": { "basis": "EXACT_LABEL_MATCH", "attributedAddress": "0x27fd43ba…" },
      "riskLevel": "LOW",
-     "legalBasis": "Section 91, Code of Criminal Procedure (India)",
+     "legalBasis": "Section 94, Bharatiya Nagarik Suraksha Sanhita, 2023 (formerly Section 91, CrPC)",
      "evidenceTrail": ["0x… (contract call — no value moved)", "…"],
      "submittedAt": "2026-…"
    }
@@ -1393,6 +1448,227 @@ still in beta, and Node's built-in `crypto` covers the requirement in less code
 with no new dependency.
 
 Demo account credentials are in `README.md`.
+
+### Feature 12 — Stablecoin issuer freeze paths
+
+**What it solves.** A disclosure request to an exchange only works if the
+funds actually reached one. USDT and USDC are different: the **issuer**
+itself (Tether, Circle) can freeze the tokens at that address directly,
+independent of where they end up. For a stablecoin-only trail that never
+reaches a labeled exchange, this is a second lever, not a fallback.
+
+**File.** `lib/scoring.ts`'s `issuerLeads`. Runs over the finished graph's
+edges (not the nodes), so it fires whenever a trace's *own transactions*
+actually moved USDT or USDC — regardless of where the trace ended.
+
+**Deliberately unscored.** `VaspRegistry` gives every exchange a numeric
+score built from real, checkable facts (FIU-IND registration, a nodal
+officer, a reliability figure). Neither Tether nor Circle publishes anything
+like that for India specifically — only general statements ("we work with
+340+ agencies in 65+ countries," "we require a binding court order"). Rather
+than invent a number to make issuers look consistent with exchanges,
+`IssuerRegistry` carries those statements as plain text and nothing else.
+Showing a fabricated score would be worse than showing no score, per this
+project's own honesty rule.
+
+**What's seeded, from each issuer's own public statements:**
+
+| Issuer | Asset | Process | Court order required? |
+|---|---|---|---|
+| Tether | USDT | Works directly with 340+ law-enforcement agencies in 65+ countries | Not documented as required |
+| Circle | USDC | Freezes "at the direction of law enforcement or the courts" | Yes |
+
+Neither has a publicly documented India-specific request channel — the
+seeded text says so plainly rather than guessing one.
+
+### Feature 13 — Live OFAC sanctions sync
+
+**What it solves.** The original labeled-address seed is a snapshot — true
+the day it was written, silently stale after. OFAC's Specially Designated
+Nationals (SDN) list is the one part of that seed with a real, machine-
+readable, continuously updated source.
+
+**File.** `lib/sanctions.ts` parses OFAC's public `SDN.CSV` export directly.
+The file has no header row and one quirk worth naming: quoted fields can
+contain commas (`"BANK, NATIONAL"`), so a naive `.split(",")` would corrupt
+the row — a small RFC-4180-style parser handles that. Crypto addresses live
+inside a free-text `remarks` field as `Digital Currency Address - <code>
+<address>`, one currency code per line (`XBT` for Bitcoin, `ETH`, `TRX`,
+`USDT`, `USDC`). Every parsed address is re-validated against `lib/address.ts`'s
+own format checks before it's trusted.
+
+**Who can run it.** `POST /api/admin/sync-sanctions`, gated to `SUPERVISOR`
+role only — it's a shared write to data every investigator's traces read,
+not a personal action. Triggered from a button on `/cases`.
+
+**A real bug a live run caught, not a code review.** The first version
+blindly overwrote *any* existing label with the sync's own `SANCTIONED`
+type — including the SamSam ransomware address already in the seed, which
+happens to also be on OFAC's own list. Running it for real downgraded a
+specific, hand-verified `RANSOMWARE` label to the generic `SANCTIONED` one.
+Fixed by checking first: create if the address is new, refresh if it's
+already `SANCTIONED`, otherwise skip and leave the curated label alone. The
+lesson generalizes — an automated data source must never silently overwrite
+a more specific, hand-verified fact.
+
+**Measured:** 456 crypto addresses as of 2026-09-14 (252 Bitcoin, 113 Tron,
+91 Ethereum), taking about 17 seconds to sync (each address is checked and
+written individually, fine for an occasional supervisor click, not built
+for a schedule).
+
+### Feature 14 — Address watchlist
+
+**What it solves.** Every other feature here is retrospective — it explains
+a trace that already happened. A watchlist flips that: alert when a
+specific address sends anywhere new, so an investigator learns about a
+movement of funds **while it's still traceable**, not after.
+
+**Files.** `lib/watch.ts`'s `checkWatch`, `app/watches/page.tsx`.
+
+**How a check works.** It re-fetches the address's outgoing transfers
+through the same per-chain API clients the tracer already uses (Etherscan,
+Blockstream, Tronscan) — not a second tracer, just one address's own
+history — and compares against `lastSeenTimestamp`. Anything newer becomes
+a `WatchAlert`, carrying the destination's label if it has one (e.g. "→
+Binance 14").
+
+**Deliberately no automatic polling.** A real "check every address every
+few minutes" feature needs a background worker — a process that runs
+independent of anyone having the page open. This app has no such worker (see
+Part 10). So a check happens two ways: a person clicks "Check now" on
+`/watches`, or an external scheduler (cron, or n8n on a timer) calls
+`POST /api/watches/check-all` with a bearer token
+(`WATCH_CRON_TOKEN`) — the same shape of server-to-server credential the
+n8n ack routes use, but this route actually checks it, since unlike the ack
+routes it does real work and writes real data.
+
+### Feature 15 — Chain of custody (audit log)
+
+**What it solves.** A tool whose output might end up cited in a legal
+proceeding needs to answer "who ran this, when, and did anyone change the
+record afterward" — not just show the right numbers today.
+
+**File.** `lib/audit.ts`. Every meaningful action (login, trace, view a
+case, download a PDF, route a disclosure request, record a VASP's response,
+add or check a watch, sync sanctions) writes one `AuditEvent` row.
+
+**How the hash chain works.** Each row's hash is computed over its own
+content *plus the previous row's hash* — the same trick a blockchain itself
+uses (see Part 2's glossary entry on blockchains). Change or delete any row,
+and every hash after it stops matching what it should be.
+`verifyAuditChain` walks the whole log and reports the first row where that
+breaks, or confirms it's intact.
+
+**Tamper-evident, not tamper-proof — stated plainly, not oversold.** This
+detects a row being altered *without also being caught*. It does not stop
+someone with direct write access to the database file from rewriting the
+entire chain from scratch, consistent hashes and all — there's no second,
+independent copy anywhere to compare against. Anchoring the latest hash
+somewhere external (another system, published periodically) is the real
+upgrade, and it isn't built.
+
+### Feature 16 — VASP-response feedback loop
+
+**What it solves.** Day one of this project added an unused
+`confirmedByVaspResponse` field "for later," with no way to actually record
+what a VASP said back. This finally wires it up.
+
+**Files.** `POST /api/cases/[id]/vasp-response`, `components/vasp-response-form.tsx`.
+
+**What it does, and — just as importantly — what it doesn't.** Once a case
+is routed, an investigator can record the outcome: `CONFIRMED` (they
+disclosed), `DENIED`, or `NO_RESPONSE`. That's an investigator-entered fact
+about one case, nothing more. It **never** writes back into
+`VaspRegistry.responseReliabilityScore` — that stays a seeded, hand-verified
+figure, and letting one case's outcome silently nudge it would undermine
+exactly the auditability this project is built around. Instead, `/cases`
+shows an **observed response rate** next to the seeded score
+("Binance: 1/4 responded") — a fact an investigator can read alongside the
+score, never blended into it.
+
+### Feature 17 — LLM-drafted case narrative
+
+**What it solves.** The PDF report is precise but terse (a table of
+addresses, hops and flags). A short paragraph of prose — "this trace
+followed 26 hops from the suspect address, flagged for fan-out and a peel
+chain, and recommends Binance" — reads more naturally in a case file, and is
+exactly the kind of writing task a language model is good at.
+
+**The one hard constraint, enforced by what data the model is even given.**
+`POST /api/cases/[id]/narrative` sends **only the already-computed
+structured facts** — risk level, typology flags, each node's kind and
+confidence, the recommendation's VASP name and score — never the raw graph
+with room to editorialize, and the system prompt states explicitly: never
+invent or override the risk level, the score, or the recommendation, and
+say plainly if there is no recommendation rather than guessing one. The
+model drafts a caption for a decision this app already made by rule; it
+never gets to make the decision itself. Model: `claude-opus-5`.
+
+**Optional, and fails safely.** With no `ANTHROPIC_API_KEY` configured, the
+route returns a clear message — "optional, never blocks the rest of the
+app" — instead of a raw error. Every other feature works identically with
+or without it, the same contract `lib/n8n.ts`'s notification already keeps.
+
+### Feature 18 — Money tracking: what went where, and how much
+
+**What it solves.** "How much money went to each wallet" turned out to be
+three different questions, each answerable a different way.
+
+**1. How much did this node receive, within this one trace? Free.** Every
+edge the trace already followed is summed per destination address, grouped
+by asset (`lib/format.ts`'s `sumValuesByAsset`) — no extra API call, since
+the tracer already has this data. Shown on the graph's node-detail sheet and
+in the PDF's hop narrative as "Received in this trace: 23.7000 ETH." A node
+reached only through zero-value contract calls shows nothing here rather
+than "0.0000 ETH" — the same "a zero isn't an observation" rule Feature 5's
+`CONTRACT_CALL` edges already established.
+
+**2. What's this specific wallet's real balance? One extra live call, but
+only for the addresses that matter.** Fetching this for every intermediary
+in a trace would roughly double the trace's cost, the same problem
+`ROADMAP.md` already measured and rejected for other features — so it's
+scoped to just the **suspect root** (how much is at stake) and any
+**labeled exchange/mixer node** the trace actually reached (how much landed
+somewhere actionable), never the plain unlabeled hops in between.
+
+**3. Real balance vs. real lifetime total — and why only Bitcoin gets the
+second one.** Blockstream indexes a Bitcoin address's **entire** confirmed
+history, so `totalReceivedBaseUnits` there is a genuine, complete,
+all-time figure. Etherscan and Tronscan's free tiers only expose *current*
+balance — getting a real lifetime total would mean paginating an address's
+entire transaction history, a much bigger and slower job. Rather than
+approximate one and risk it reading as more solid than it is, Ethereum,
+Polygon, Arbitrum and Tron only ever show **current balance**, clearly
+labeled as such. This is the same instinct behind the Bitcoin-only
+`totalReceivedBaseUnits` field itself: state exactly what was actually
+observed, on the chain where it can genuinely be proven, and nothing more
+confident on the chains where it can't.
+
+**4. How much has gone to each VASP, across every case ever traced? A
+dashboard question, not a trace question.** `lib/scoring.ts`'s
+`aggregateReceivedByVasp` parses every stored case's saved trace and sums
+the real transfers that reached each labeled exchange, grouped by VASP name
+and by asset — shown on `/cases` as e.g. "Binance: 0.0002 BTC + 376.7277
+ETH + 7509.8000 USDT · 11 cases." **Never blended into one dollar figure** —
+there's no live price feed anywhere in this app, and inventing a USD
+conversion would be exactly the kind of unverified number Feature 12's
+issuer registry already refuses to produce. A same-wallet (co-spend)
+inference is excluded here too — it's a lead, not confirmed money to that
+VASP.
+
+**Two real bugs a live check on the dashboard caught, not a code review —
+both the identical shape.** The aggregation first counted `CONTRACT_CALL`
+edges (interactions, not payments) toward a VASP's total, so an exchange
+reached only through zero-value calls showed "0.0000 ETH" — a payment of
+nothing, printed as if it were one. Fixed by excluding those edges. Even
+after that fix, one VASP's row *still* showed a zero: traced to a case
+stored before the `CONTRACT_CALL`/`TRANSFER` distinction existed at all,
+whose edge has no `kind` field and is read as a transfer by the standing
+back-compat rule (Feature 5), but whose stored value happens to be a literal
+zero — a fossil of the exact bug Feature 5 was built to fix in the first
+place. Rather than special-case every historical reason a total could land
+on exactly zero, the aggregation now drops any zero total outright,
+whatever produced it.
 
 ---
 
@@ -1489,6 +1765,8 @@ check, then a per-case ownership check.
 ```mermaid
 erDiagram
     User ||--o{ Case : creates
+    User ||--o{ Watch : creates
+    Watch ||--o{ WatchAlert : "raises"
     User {
         string id
         string username
@@ -1499,19 +1777,21 @@ erDiagram
     Case {
         string id
         string address
-        Chain chain "BITCOIN | ETHEREUM | TRON"
+        Chain chain "BITCOIN | ETHEREUM | TRON | POLYGON | ARBITRUM"
         CaseStatus status "OPEN | TRACED | ROUTED | CLOSED"
         RiskLevel riskLevel "LOW | MEDIUM | HIGH | CRITICAL"
         string recommendedVaspId "holds the VASP name"
         string traceResult "full graph JSON"
         string typologyFlags "JSON array"
-        bool confirmedByVaspResponse "unused, roadmap"
+        bool confirmedByVaspResponse "mirrors vaspResponse = CONFIRMED"
+        string vaspResponse "CONFIRMED | DENIED | NO_RESPONSE, 2026-09-14"
+        string narrativeDraft "LLM-drafted prose, 2026-09-14"
         string createdById
     }
     LabeledAddress {
         string address
         Chain chain
-        LabelType labelType
+        LabelType labelType "…SANCTIONED added 2026-09-14"
         string entityName
         string source
     }
@@ -1521,10 +1801,38 @@ erDiagram
         bool hasIndiaNodalOfficer
         int responseReliabilityScore
     }
+    IssuerRegistry {
+        string symbol "USDT | USDC — 2026-09-14"
+        string issuerName
+        string freezeProcess
+        bool requiresCourtOrder
+    }
+    AuditEvent {
+        int id
+        string userId
+        string action
+        string caseId
+        string prevHash "hash-chained, 2026-09-14"
+        string hash
+    }
+    Watch {
+        string address
+        Chain chain
+        int lastSeenTimestamp
+    }
+    WatchAlert {
+        string txHash
+        string toAddress
+        string valueBaseUnits
+        string entityName "the destination's label, if any"
+    }
 ```
 
 `LabeledAddress` and `VaspRegistry` aren't linked by a foreign key; the scoring
-code joins them by name at runtime (first word of the entity name).
+code joins them by name at runtime (first word of the entity name). Same for
+`IssuerRegistry`, joined by asset symbol. `AuditEvent` carries a `userId` and
+`caseId` but neither is a Prisma relation — it's an append-only log, not
+something anything else should ever join against and mutate through.
 
 ### Where things live
 
@@ -1532,29 +1840,41 @@ code joins them by name at runtime (first word of the entity name).
 app/
   page.tsx                     search landing page + trace results
   login/                       login page
-  cases/page.tsx               dashboard
-  cases/[id]/page.tsx          case detail
+  cases/page.tsx               dashboard (+ money-into-each-VASP card)
+  cases/[id]/page.tsx          case detail (+ chain of custody, narrative, VASP response)
+  watches/page.tsx             address watchlist
   api/trace/route.ts           run a trace, save a Case
   api/cases/[id]/report/       PDF
   api/cases/[id]/sahyog/       simulated disclosure routing
+  api/cases/[id]/narrative/    LLM-drafted case narrative
+  api/cases/[id]/vasp-response/ record a VASP's actual reply
+  api/watches/                 watchlist CRUD + check-all (token-gated)
+  api/admin/sync-sanctions/    live OFAC sync (supervisor only)
   api/auth/                    login / logout
   api/n8n/*-ack/               n8n callbacks (unauthenticated)
 components/
   graph-view.tsx               force-directed graph
   dashboard-charts.tsx         charts (client component)
+  chain-of-custody.tsx         audit-log timeline
+  case-narrative.tsx           LLM narrative draft/display
+  vasp-response-form.tsx       record a VASP's reply
+  watches-panel.tsx            add/check watched addresses
   ui/                          shadcn primitives
 lib/
   tracers/bfs.ts               shared BFS engine
   tracers/{ethereum,bitcoin,tron}.ts   chain adapters
   tracers/types.ts             TraceNode / TraceEdge / TraceGraph
-  {etherscan,blockstream,tronscan}.ts  API clients
+  {etherscan,blockstream,tronscan}.ts  API clients (+ balance/stats fetchers)
   rateLimit.ts                 per-API request queue
-  clustering.ts                confidence tiers
+  clustering.ts                confidence tiers (+ Bitcoin co-spend attribution)
   typology.ts                  pattern flags
-  scoring.ts                   legal score + risk level
-  format.ts                    shared labels, evidence trail, legal basis
+  scoring.ts                   legal score + risk level (+ issuer leads, VASP-inflow totals)
+  format.ts                    shared labels, evidence trail, legal basis (+ money formatting)
   address.ts                   address validation + chain detection
   auth.ts                      hashing, sessions, access checks
+  audit.ts                     hash-chained chain-of-custody log
+  sanctions.ts                 OFAC SDN.CSV parser
+  watch.ts                     address-watchlist checks
   n8n.ts                       webhook notify
   pdf/report.tsx               PDF layout
 prisma/
@@ -1735,54 +2055,89 @@ Things a reader should know before trusting a result. Most are tracked in
 - **Top 5 destinations per address, 60 addresses per trace.** Low-value
   branches are dropped by design.
 - **Bitcoin change to fresh addresses** appears as a hop.
-- **No Bitcoin entity clustering** (roadmap item 2).
-- **No cross-chain following. (found while writing this)** `BRIDGE` exists as
-  a label type and graph color, but no bridge address is seeded and the
-  "Cross-chain hop detected — manual correlation required" placeholder the
-  original brief asked for does not appear anywhere in the code. A trace into a
-  bridge currently just looks like an unlabeled address.
+- **Bitcoin entity clustering — SHIPPED 2026-09-14.** Common-input ownership
+  (roadmap item 2), attribution only, not merged nodes; a same-wallet
+  exchange match routes as an ownership-confirmation request.
+- **No cross-chain following.** `BRIDGE` exists as a label type and graph
+  color, but no bridge address is seeded and the "Cross-chain hop detected —
+  manual correlation required" placeholder the original brief asked for does
+  not appear anywhere in the code. A trace into a bridge currently just looks
+  like an unlabeled address. Scoped 2026-09-14 (roadmap item 4) — two real
+  bridge-message APIs confirmed working, not yet built.
 - **Contract calls are classified by zero total value, not by calldata.** A
   genuine zero-value plain send would be misnamed a contract call (rare).
-- **Contract-call edges still count toward fan-out.** Known and mitigated by the
-  threshold of 5.
+- **Contract-call edges no longer count toward fan-out — fixed 2026-09-14.**
+  They moved no value, so they can't be smurfing; excluded from the
+  destination count that feeds `FAN_OUT`. Only affects new traces — stored
+  cases keep the flags they were saved with.
 
 **Data**
 
-- **18 labels.** Coverage is thin, especially Bitcoin (2 exchange addresses,
-  both Binance), which caps how often a trace ends with a recommendation.
-- **No darknet labels seeded. (found while writing this)** So in practice
-  `CRITICAL` risk can only come from the single SamSam ransomware address.
+- **34 hand-verified labels, plus 456 live-synced OFAC-sanctioned addresses**
+  (updated 2026-09-14; was 18 at submission). Bitcoin exchange coverage is
+  still thin (2 exact addresses, both Binance) — common-input clustering
+  (above) stretches those few labels across whole wallets, but hand-verified
+  Bitcoin *exchange* labels themselves didn't grow.
+- **Darknet labels: still none seeded.** `CRITICAL` risk can come from the
+  SamSam ransomware address or, since 2026-09-14, any OFAC-sanctioned
+  address — no longer just the one label.
 - **Registry values are hand-assigned** from public reporting; reliability
   scores are judgment calls, and the seed file says to verify against the live
-  FIU-IND list before real use.
-- **The brief's own example can't occur. (found while writing this)** The
-  original plan's example, "Recommended: CoinDCX (2 hops) over Binance (1 hop),"
-  can't happen with current data, because CoinDCX has a registry entry but no
-  seeded address. The Bitbns-over-Kraken example in Part 5 is one that can.
-- **A recommendation appears even when the score is negative.** For example,
-  Bitfinex 3 hops out scores 0 + 0 + 1 − 3 = −2 and is still recommended if it's
-  the only exchange reached. The breakdown is shown, but there's no minimum
-  score.
-- **Labels are a point-in-time snapshot.** No live sanctions sync (roadmap
-  item 5).
+  FIU-IND list before real use. The new `IssuerRegistry` (Tether/Circle,
+  2026-09-14) is deliberately **unscored** for the same honesty reason —
+  their public statements don't support a reliability figure the way the
+  VASP registry's does.
+- **The brief's own example can't occur.** The original plan's example,
+  "Recommended: CoinDCX (2 hops) over Binance (1 hop)," can't happen with
+  current data, because CoinDCX has a registry entry but no seeded address.
+  The Bitbns-over-Kraken example in Part 5 is one that can.
+- **A recommendation appears even when the score is negative — labeled now,
+  fixed 2026-09-14.** Bitfinex 3 hops out still scores 0+0+1−3 = −2 and is
+  still recommended if it's the only exchange reached (the arithmetic stays
+  visible on principle), but the page now shows a visible low-actionability
+  warning next to it instead of presenting it identically to a healthy score.
+- **Labels are largely live now.** OFAC sanctions sync live since
+  2026-09-14 (roadmap item 5); the hand-curated exchange/mixer/ransomware
+  labels remain a point-in-time seed, verified individually rather than
+  synced, since there's no equivalent machine-readable feed for those.
 
 **Legal**
 
-- **Possibly outdated legal citation. (found while writing this)** The
-  disclosure payload cites "Section 91, Code of Criminal Procedure." The CrPC
-  was replaced by the BNSS on 1 July 2024, where the equivalent provision is
-  Section 94. This needs confirming by someone with legal training before the
-  payload is presented as ready to use.
+- **Legal citation — fixed 2026-09-14.** The disclosure payload now cites
+  "Section 94, Bharatiya Nagarik Suraksha Sanhita, 2023 (formerly Section 91,
+  CrPC)" — the CrPC was replaced 1 July 2024 and BNSS Section 94 is its
+  successor "summons to produce document" provision. Still needs sign-off
+  from someone with legal training before the payload is presented as ready
+  to use; this is a correction to a known-stale citation, not a claim of
+  legal authority.
 - **Sahyog routing is simulated.** Nothing is sent.
-- **Stablecoin issuer freezes aren't modeled** (roadmap item 3).
+- **Stablecoin issuer freeze paths — modeled since 2026-09-14** (roadmap
+  item 3), as facts (each issuer's own stated freeze process), not a score —
+  see the Data section above for why.
 
 **Operations and security**
 
 - **Pacing is in-memory, single-process.** On serverless hosting or several
   instances it wouldn't coordinate, and rate-limit errors could return.
-- **No audit log, password reset, SSO or encryption at rest.**
+- **Chain of custody shipped 2026-09-14** (a hash-chained `AuditEvent` log,
+  tamper-evident not tamper-proof — see `ARCHITECTURE.md`'s own section).
+  Still no password reset, SSO or encryption at rest.
 - **Deep traces are slow** (~25s for 60 nodes) because API calls are serialized.
-- **No monitoring/alerts.** Traces look backwards only (roadmap item 6).
+- **Address monitoring shipped 2026-09-14** (roadmap item 6) — a watchlist
+  with alerts on new outgoing transfers, checked on demand or via an
+  external scheduler. Still no in-app worker/scheduler of its own, by
+  design — see `ROADMAP.md`'s own note on that cost.
+- **Money-tracking is real but deliberately partial (Feature 18,
+  2026-09-14).** No live price feed anywhere, so nothing is ever converted
+  to a dollar figure or blended across currencies — an investigator reading
+  "0.0002 BTC + 376.7277 ETH + 7509.8000 USDT" has to know those are three
+  separate amounts, not one number. Wallet balance/total-received is
+  native-currency only (no stablecoin token balance) and scoped to the
+  suspect root and labeled nodes only, not every intermediary — an
+  intentional cost decision, not an oversight. Bitcoin's
+  "total received, all-time" is a real, complete figure; the same field on
+  every other chain would only ever be an approximation, so it isn't shown
+  there at all.
 
 ---
 
@@ -1800,6 +2155,14 @@ Things a reader should know before trusting a result. Most are tracked in
   migration for no behavior change, so it was left alone.
 - **`proxy.ts` is the middleware.** Next.js 16 renamed it; a `middleware.ts`
   would silently do nothing.
+- **`balanceBaseUnits` is current holdings; `totalReceivedBaseUnits` is a
+  lifetime sum — and only Bitcoin ever sets the second one.** Both are
+  native-currency base units (wei/satoshi/sun) regardless of the field name.
+  A node missing both isn't necessarily empty — it just wasn't one of the
+  root/labeled nodes this trace bothered to fetch live stats for (Feature
+  18); check `receivedInTrace` separately, since that's a different number
+  (what the trace itself observed flowing in) computed a different way (free,
+  from already-fetched edges, every node, not just root/labeled ones).
 - **Check `kind === "CONTRACT_CALL"`, never `kind !== "TRANSFER"`.** Old stored
   cases have no `kind`.
 - **`confirmedByVaspResponse` is unused.** A placeholder for a future feedback

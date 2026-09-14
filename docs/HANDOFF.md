@@ -16,15 +16,72 @@ The authoritative priority order is **[`ROADMAP.md`](./ROADMAP.md)**, written
 2026-09-12. `PLAN.md` is the frozen 5-day brief — history, not a to-do list.
 `PROGRESS.md`'s recent changelog entries are still the record of what shipped.
 
-**STATE (2026-09-13):** two features shipped on 2026-09-13 and were handed to
-the user to commit themselves at the end of that session (the session itself
-was told not to commit). If `git status` still shows them modified, that
-commit didn't happen — check before building on top.
+**STATE (2026-09-14, session 3) — money-tracking shipped on top of session
+2's roadmap work.** Session 2: `ROADMAP.md` items 0-3, 5 and 6 all shipped;
+item 4 (bridge traversal) is scoped with two real APIs confirmed working but
+not built; item 7 (mixer demixing) stays deliberately parked. `main` was
+fast-forwarded to `day3-n8n-rehearsal` (52 commits, clean, no merge
+needed) — `git log` on `main` now reflects the real state of this project,
+which older entries in this file correctly complained it didn't. Session 3
+(user-requested, not on the roadmap): three kinds of money-tracking —
+received-in-trace (free), a wallet's live balance/total-received (root +
+labeled nodes only, Bitcoin alone gets a real lifetime total), and money
+into each VASP across every stored case (`/cases`, never blended into a
+dollar figure — no price feed anywhere in this app). **Nothing from either
+session is committed** (asked not to) — check `git status` before building
+on top; everything is verified (all 7 self-checks, `tsc`, `eslint`,
+`next build` clean at 19 routes) and browser-tested live. `Case` count is
+**98** as of session 3 (was 88 at session 2's start — 9 of those are the
+*user's* own traces run between sessions, correctly left alone; only the
+session's own 3 test cases were deleted, checked by `createdAt` first).
 
-- **ROADMAP item 1, stablecoin tracing** — touches
-  `lib/{etherscan,tronscan,format,clustering,typology}.ts`,
-  `lib/tracers/{types,bfs,ethereum,tron}.ts`, `components/graph-view.tsx`,
-  `lib/pdf/report.tsx`, three self-checks.
+Full list of what shipped and what was fixed, including bugs found live
+(session 2: a dangling-edge crash, a stale legal citation, FAN_OUT counting
+contract calls, Bitcoin change-detection missing co-spender vouts, no
+pagination on BTC/Tron, and a sync route that downgraded a hand-verified
+label; session 3: two instances of the identical "a zero-value contract call
+isn't a payment" bug reappearing in the new money-aggregation code, both
+caught by checking the live dashboard, not by review) is `PROGRESS.md`'s
+2026-09-14 "session 2" and "session 3" changelog entries — read those before
+re-deriving any of it. `EXPLAINER.md` now has full feature write-ups for
+everything both sessions shipped (Features 12-18).
+
+**Currently open, not fixed, found this session:**
+
+- **The VASP-response and narrative cards on `/cases/[id]` need a page
+  reload to appear after a Sahyog routing click.** The page is a React
+  Server Component; `SahyogButton`'s client-side `routed` state flip doesn't
+  retroactively reveal content gated server-side on `kase.status`. Not a
+  regression — same pattern the page already had. A proper fix (lift
+  `routed` state up, or call a router refresh) touches `SahyogButton` and
+  wasn't attempted; small enough for a session with room to verify it
+  doesn't disturb the existing routing flow.
+- **The money-tracking `fetchStats` addition was never timing-measured
+  against real concurrent traces**, only reasoned about (scoped to 1-3
+  nodes per trace, so small) — `ROADMAP.md`'s own standing rule says a
+  per-node API addition needs a measured number, not an estimate, and this
+  one didn't get one. Worth an A/B trace-timing pass before trusting it at
+  demo pacing.
+- **The downloaded-PDF path wasn't visually verified this session** for the
+  new money-tracking fields (received-in-trace, balance, total-received in
+  the hop narrative) — the browser tool's download didn't save
+  (`renderToBuffer` also can't run under raw `tsx`, see the existing gotcha
+  below), so this was confirmed only via a 200 response and direct
+  inspection of the stored trace JSON, not the rendered PDF text. Worth a
+  `pdftotext` pass on an actual downloaded file next session.
+- **This sandbox's `pkill` hangs and gets killed (exit 144) even with a
+  pattern that matches nothing** — see the new Gotchas entry below. Every
+  earlier `pkill -f "next dev"` instruction in this file and in
+  `DEMO_SCRIPT.md` may not work in this environment; use `ps`/`pgrep` +
+  `kill <pid>` instead.
+
+**Older, still relevant:** two features shipped on 2026-09-13 (stablecoin
+tracing, Polygon/Arbitrum chains) — touches
+`lib/{etherscan,tronscan,format,clustering,typology}.ts`,
+`lib/tracers/{types,bfs,ethereum,tron}.ts`, `components/graph-view.tsx`,
+`lib/pdf/report.tsx`. These are committed now (part of the same
+fast-forward above), so the "handed to the user to commit" caveat that used
+to be here no longer applies.
 
 **Polygon + Arbitrum chains, 2026-09-13** (user's pick —
 free on the Etherscan key; BSC/Base/Optimism/Avalanche are not). `Chain` enum
@@ -358,11 +415,21 @@ All logged in `PROGRESS.md`, but worth having front-of-mind:
   deliberately (renaming costs a migration for zero behaviour change), but
   don't "fix" the fallback without understanding it, and don't assume the
   column is a foreign key. `Case.createdById` *is* a real FK.
-- **`node not found: <address>` in the browser console is a known bug, not
-  your change** (found 2026-09-14). A trace that hits `NODE_BUDGET` still
-  pushes the edge to a destination `bfs.ts` didn't add as a node, and
-  `react-force-graph` throws on it (Next's "1 Issue" badge). The graph still
-  renders. Unfixed: see `PROGRESS.md` 2026-09-14.
+- **`node not found: <address>` — was a known bug, FIXED 2026-09-14 (session
+  2).** A trace that hit `NODE_BUDGET` used to push an edge to a destination
+  `bfs.ts` hadn't added as a node, and `react-force-graph` threw on it.
+  `lib/tracers/bfs.ts` now creates the node before pushing its edge and skips
+  the edge if the budget didn't allow the node; `components/graph-view.tsx`
+  also filters any edge whose endpoint is missing, so the handful of already-
+  stored truncated cases from before this fix still render clean.
+- **A sync route must never blindly upsert over a hand-curated label.**
+  `lib/sanctions.ts`'s OFAC sync did exactly that on its first live run —
+  downgraded the seeded SamSam address from `RANSOMWARE` to the generic
+  `SANCTIONED` the moment it ran, since OFAC's own feed also lists it. Fixed
+  by checking the existing row's `labelType` first and skipping anything
+  that isn't already `SANCTIONED`. Worth remembering for item 4 (bridge
+  traversal) or any future automated label source: automated data must never
+  overwrite a specific hand-verified label with a more generic one.
 - **Bitcoin nodes can carry "<label> — same wallet"** (medium confidence,
   common-input ownership, `ROADMAP.md` item 2). It is not an exact match. A
   same-wallet *exchange* match **does** route (user decision 2026-09-14): the
@@ -373,6 +440,21 @@ All logged in `PROGRESS.md`, but worth having front-of-mind:
   confirmed label.
 - **n8n test webhooks are one-shot.** Click "Execute workflow" before *every*
   trigger, and the two workflows arm separately. See item 1 above.
+- **`pkill` hangs in this sandbox — found 2026-09-14, session 3.** Even
+  `pkill -f "some_pattern_that_matches_nothing"` hung with no output and got
+  killed (exit 144); `which pkill` resolved fine, `ps aux`/`pgrep` worked
+  normally throughout, and no process was actually running that `pkill`
+  could have been scanning for. Root cause not identified — plausibly the
+  sandbox blocks or delays whatever `pkill` needs to enumerate all
+  processes (not just the sandbox's own). Workaround: `ps aux | grep
+  <pattern>` or `pgrep -af <pattern>` to find the PID, then `kill <pid>` (or
+  `kill -9`) directly — both worked fine. Don't assume a hung `pkill` means
+  a process is stuck; it may just be `pkill` itself. Check before spending
+  time debugging "why won't the dev server die."
+- **The VASP-response/narrative cards need a page reload after Sahyog
+  routing to appear** — see the STATE section above for the mechanism.
+  Not a data bug (the routing itself works), just a client/server state
+  sync gap in `app/cases/[id]/page.tsx`.
 
 Verify UI changes in the browser, and measure rather than eyeball (contrast
 ratios, `scrollWidth` at 375px) — several "bugs" this project turned out to

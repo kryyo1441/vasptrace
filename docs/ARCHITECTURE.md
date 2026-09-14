@@ -57,10 +57,37 @@ isn't the login screen, it's what a session actually authorizes:
   by n8n itself, server-to-server, with no browser session; they only log
   receipt and return nothing sensitive. Gating them would have broken the
   workflow integration for no real security gain.
+- **`POST /api/watches/check-all` (added 2026-09-14) is the second
+  server-to-server route, and it isn't unauthenticated like the ack
+  endpoints — it triggers real API calls and writes alert data, so it
+  carries its own bearer-token check (`WATCH_CRON_TOKEN`, constant-time
+  compared) instead of relying on the session cookie an external scheduler
+  can't supply. Same reasoning as the ack endpoints (no browser session
+  exists to check), different conclusion (this route does enough to need a
+  credential of its own).
 
-Known limitation, stated plainly: there's no audit log, no password reset,
-and no SSO. For a real deployment those matter, along with encryption at
-rest for the SQLite file. See [`ROADMAP.md`](./ROADMAP.md).
+## Chain of custody
+
+Added 2026-09-14, closing a gap `PITCH.md` §12 already promised: "who ran
+what, when, and what did the report say at the time." `AuditEvent`
+(`lib/audit.ts`) is append-only and hash-chained — each row's hash covers its
+own content plus the previous row's hash, so editing or deleting any row
+breaks every hash after it. `verifyAuditChain` walks the whole log and
+returns the id of the first broken link, or `null`. This is **tamper-
+evident, not tamper-proof**: anyone with write access to `dev.db` can still
+rewrite the entire chain from scratch, consistent hashes and all — the guard
+is against a row being altered *without* also being caught, not against
+someone with database access at all. Anchoring the head hash somewhere
+external (a second store, a periodic external write) is the real upgrade,
+not built here. Every action with legal or investigative weight is logged:
+login (success and failure), trace, view/download/route/respond/draft-
+narrative on a case, watch add/check, and sanctions sync. `/cases/[id]`
+renders the case's own timeline plus the whole-log verification result.
+
+Known limitation, stated plainly: there's a chain-of-custody audit log
+(above) but no password reset and no SSO. For a real deployment those
+matter, along with encryption at rest for the SQLite file. See
+[`ROADMAP.md`](./ROADMAP.md).
 
 ## Tracer scope — native transfers plus stablecoins
 
@@ -149,7 +176,55 @@ heuristic/simulation. At a glance:
 | PDF report | **Live** — generated from the actual persisted trace, no placeholder data |
 | n8n pipeline visualization | **Real workflow, illustrative re-check** — the canvas actually executes on real trace data, but the "check against labeled DB" step it shows is a visual mirror of a check Next.js already performed, not a second live lookup |
 | Sahyog routing | **Simulated** — no real Sahyog API is publicly available; the JSON payload shown is what *would* be sent, and it's never transmitted anywhere outside the local system |
-| Cross-chain bridge correlation | **Out of scope** — placeholder only, per `PLAN.md` |
+| Cross-chain bridge correlation | **Scoped, not built** — `ROADMAP.md` item 4; two real bridge-message APIs confirmed working, no code yet |
+| OFAC sanctions sync | **Live** — parses OFAC's real public `SDN.CSV` export, `lib/sanctions.ts`, `ROADMAP.md` item 5 |
+| Issuer freeze-path facts | **Live data, no scoring** — Tether/Circle's own public statements, `lib/scoring.ts`'s `issuerLeads`; deliberately unscored, see `ROADMAP.md` item 3 |
+| Address watchlist | **Live** — real API polling on demand or via an external scheduler, no synthetic alerts, `ROADMAP.md` item 6 |
+| Audit log / chain of custody | **Live** — a real hash-chained log of real actions, `lib/audit.ts`; tamper-*evident*, not tamper-*proof* (see its own section below) |
+| LLM-drafted case narrative | **Live when configured, optional** — real Claude API call over the already-computed trace facts; drafts prose only, never the score/risk/recommendation. Degrades to a clear error, never blocks the app, if `ANTHROPIC_API_KEY` is unset |
+| Money tracking (received-in-trace, wallet balances, cross-case VASP inflow) | **Live** — real chain data throughout; no price feed, so nothing is ever converted to or blended into one dollar figure. See below |
+
+## Money tracking: three questions, three costs
+
+Added 2026-09-14, user-requested. "How much money has gone to each wallet"
+split into three genuinely different questions, each answered a different
+way and each carrying a different cost:
+
+- **Received within a trace.** Free — `lib/format.ts`'s `sumValuesByAsset`
+  sums a node's incoming edges (already fetched by the BFS), grouped by
+  asset. Every node. A zero total (reached only via zero-value
+  `CONTRACT_CALL` edges) is filtered before it's even stored, not just
+  before display — the same "a zero isn't an observation" rule that edge
+  typing already enforces (below).
+- **A wallet's real balance / total-received.** One extra paced live call,
+  so deliberately **not** every node — only the suspect root and any
+  `LABEL_MATCH` node, via a new optional `ChainAdapter.fetchStats`.
+  Asymmetric on purpose: Bitcoin's `totalReceivedBaseUnits` is a genuine
+  lifetime figure (Blockstream's `chain_stats.funded_txo_sum` indexes full
+  history); every other chain only ever gets `balanceBaseUnits` (current
+  holdings), because their free-tier APIs have no equivalent without
+  paginating an address's entire history — showing an approximate "total
+  received" there would overstate what was actually observed.
+- **Money into each VASP, across every stored case.** A `/cases` dashboard
+  card, not a per-trace figure — `lib/scoring.ts`'s `aggregateReceivedByVasp`
+  parses every case's stored `traceResult` (a second O(all-cases) pass,
+  same `ponytail:` cost note as the existing typology tally) and sums
+  confirmed-transfer edges into each exact-label exchange, grouped by VASP
+  name **and** asset symbol. Never blended into one dollar figure — there is
+  no price feed anywhere in this app, and same-wallet (co-spend) matches are
+  excluded, since an inference isn't confirmed money to that VASP.
+
+**Two real bugs, one shape, caught live.** The cross-case aggregation
+originally summed `CONTRACT_CALL` edges too, so a VASP reached only through
+zero-value calls printed "0.0000 ETH" — the identical mistake "Edges say
+whether value actually moved" (below) already exists to prevent, just
+reintroduced in a new aggregation that hadn't been taught the rule yet.
+Fixed, then a second, subtler case surfaced: a pre-2026-09-12 stored case
+(no `kind` field, correctly read as `TRANSFER` by the standing back-compat
+rule) whose edge value happened to be a literal `"0"` — a fossil of the
+exact phantom-edge bug that rule exists to paper over. Rather than enumerate
+every historical reason a total could land on exactly zero, the aggregation
+now drops any zero total at the end, regardless of source.
 
 ## Why n8n is a visibility layer, not the tracing engine
 
