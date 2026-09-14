@@ -4,6 +4,7 @@ import { traceBitcoin } from "@/lib/tracers/bitcoin";
 import { traceTron } from "@/lib/tracers/tron";
 import { deriveRiskLevel } from "@/lib/scoring";
 import { notifyN8n } from "@/lib/n8n";
+import { audit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { CHAIN_LABEL } from "@/lib/format";
@@ -87,6 +88,13 @@ export async function POST(req: NextRequest) {
         typologyFlags: JSON.stringify(typologyFlags),
         createdById: user.id,
       },
+    });
+
+    await audit(user.id, "TRACE", savedCase.id, {
+      address: graph.rootAddress,
+      chain: graph.chain,
+      maxDepth,
+      nodeCount: graph.nodes.length,
     });
 
     // SIH plan item 6 — mirror this hop-by-hop pipeline on n8n's canvas for
