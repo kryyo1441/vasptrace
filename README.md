@@ -13,12 +13,22 @@ for how it's built and what's live vs. simulated,
 Tracer scope: **five chains** — Ethereum, Polygon and Arbitrum (all via one
 Etherscan v2 key), Bitcoin and Tron — following native transfers plus
 allowlisted stablecoins (USDT/USDC on the EVM chains, USDT on Tron). Other
-tokens are not followed (`docs/ROADMAP.md` item 1). Arbitrum has no seeded
-exchange labels yet, so its traces draw a graph but can't recommend a VASP.
-Graph
-edges distinguish a real value `TRANSFER` from a zero-value `CONTRACT_CALL`,
-so an interaction is never presented as a payment — including in the
-generated disclosure request (`docs/ROADMAP.md` item 0).
+tokens are not followed (`docs/ROADMAP.md` item 1). Arbitrum now has three
+seeded exchange labels (Binance ×2, OKX). Graph edges distinguish a real
+value `TRANSFER` from a zero-value `CONTRACT_CALL`, so an interaction is
+never presented as a payment — including in the generated disclosure request
+(`docs/ROADMAP.md` item 0). Bitcoin common-input ownership attributes
+addresses to a same-wallet exchange (`docs/ROADMAP.md` item 2). Every
+stablecoin edge also surfaces its issuer's known freeze process
+(`docs/ROADMAP.md` item 3) and the live-synced OFAC SDN list adds a
+`SANCTIONED` label type (item 5). An address watchlist (`/watches`, item 6)
+and an append-only, hash-chained audit log (chain of custody, shown on every
+case page) round out phase 2. Money is tracked three ways: what a node
+received within one trace (free), a wallet's live balance (plus Bitcoin's
+own real lifetime-received figure), and how much has flowed into each VASP
+across every stored case — never blended into a dollar figure, since there's
+no price feed here. See `docs/PROGRESS.md`'s 2026-09-14 entries for the full
+list and what's still open.
 
 ## Setup
 
@@ -48,7 +58,16 @@ Once signed in, paste a wallet address, pick a chain (Ethereum, Polygon,
 Arbitrum, Bitcoin or Tron — all trace live), run a trace.
 
 `TRONSCAN_API_KEY` in `.env.example` is optional — the Tron tracer works
-keyless at demo volume.
+keyless at demo volume. `ANTHROPIC_API_KEY` and `WATCH_CRON_TOKEN` are also
+optional — see `.env.example` for what each unlocks; every other route works
+with both unset.
+
+A supervisor account can trigger a live OFAC sanctions sync from the "Sync
+OFAC sanctions list" button on `/cases`. An investigator or supervisor can
+add an address to `/watches` and click "Check now", or point an external
+scheduler at `POST /api/watches/check-all` with `Authorization: Bearer
+$WATCH_CRON_TOKEN` — there's no in-app worker, by design (`docs/ROADMAP.md`
+item 6).
 
 ## n8n (optional)
 
@@ -73,4 +92,8 @@ framework:
 npx tsx lib/scoring.test.ts
 npx tsx lib/typology.test.ts
 npx tsx lib/clustering.test.ts
+npx tsx lib/format.test.ts
+npx tsx lib/address.test.ts
+npx tsx lib/audit.test.ts
+npx tsx lib/sanctions.test.ts
 ```
