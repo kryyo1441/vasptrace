@@ -372,7 +372,9 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
                   <ShieldCheck className="size-3.5 text-muted-foreground" />
                   {selected.confidence}
                 </div>
-                <div className="text-xs text-muted-foreground">
+                {/* wrap-anywhere: co-spend reasons carry a 64-char txid,
+                    which overflowed the 383px sheet (measured 408px). */}
+                <div className="text-xs text-muted-foreground wrap-anywhere">
                   {selected.confidenceReason ?? "Exact address match against the labeled-address DB"}
                 </div>
               </div>
