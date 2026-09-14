@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { TraceGraph, TraceNode, TypologyFlag } from "@/lib/tracers/types";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
-import { edgeAmountLabel, isContractCall } from "@/lib/format";
+import { assetTotalsLabel, edgeAmountLabel, formatAssetValue, isContractCall } from "@/lib/format";
 import {
   Sheet,
   SheetContent,
@@ -33,6 +33,7 @@ const NODE_COLOR: Record<TraceNode["kind"], string> = {
   RANSOMWARE: "#7f1d1d", // dark red
   BRIDGE: "#0d9488", // teal — was #2563eb, collided with the new --primary
   UNKNOWN: "#6b7280",
+  SANCTIONED: "#991b1b", // dark red, distinct from DARKNET/RANSOMWARE's #7f1d1d
 };
 
 const NODE_KIND_LABEL: Record<TraceNode["kind"], string> = {
@@ -44,6 +45,7 @@ const NODE_KIND_LABEL: Record<TraceNode["kind"], string> = {
   RANSOMWARE: "Ransomware",
   BRIDGE: "Bridge",
   UNKNOWN: "Unknown",
+  SANCTIONED: "OFAC sanctioned",
 };
 
 // Contract-call edges: deliberately the dimmest thing on the canvas. They
@@ -122,7 +124,11 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
     // exactly on top of each other and only one hover label is reachable —
     // bow each extra parallel link out further.
     const parallelCount = new Map<string, number>();
-    const links = graph.edges.map((e) => {
+    // Cases stored before the 2026-09-14 bfs.ts fix can hold an edge into a
+    // node the node budget never created; react-force-graph throws "node not
+    // found" on it. Drop those here so old truncated cases still render.
+    const nodeIds = new Set(graph.nodes.map((n) => n.address));
+    const links = graph.edges.filter((e) => nodeIds.has(e.from) && nodeIds.has(e.to)).map((e) => {
       const pair = `${e.from}|${e.to}`;
       const i = parallelCount.get(pair) ?? 0;
       parallelCount.set(pair, i + 1);
@@ -159,6 +165,7 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
       "INTERMEDIARY",
       "MIXER",
       "BRIDGE",
+      "SANCTIONED",
       "DARKNET",
       "RANSOMWARE",
       "UNKNOWN",
@@ -383,6 +390,29 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
               <div>
                 <div className="text-xs text-muted-foreground">Source</div>
                 <div className="text-sm">{selected.source}</div>
+              </div>
+            )}
+            {selected && (selected.receivedInTrace?.length ?? 0) > 0 && (
+              <div>
+                <div className="text-xs text-muted-foreground">Received in this trace</div>
+                {/* Only what this trace's BFS actually followed into this
+                    node — not the wallet's real total, see TraceNode's own
+                    comment on receivedInTrace. */}
+                <div className="text-sm">{assetTotalsLabel(selected.receivedInTrace!, graph.chain)}</div>
+              </div>
+            )}
+            {selected?.balanceBaseUnits && (
+              <div>
+                <div className="text-xs text-muted-foreground">
+                  Current balance (live) — {NODE_KIND_LABEL[selected.kind]}
+                </div>
+                <div className="text-sm">{formatAssetValue(selected.balanceBaseUnits, undefined, graph.chain)}</div>
+              </div>
+            )}
+            {selected?.totalReceivedBaseUnits && (
+              <div>
+                <div className="text-xs text-muted-foreground">Total received (all-time, live)</div>
+                <div className="text-sm">{formatAssetValue(selected.totalReceivedBaseUnits, undefined, graph.chain)}</div>
               </div>
             )}
             {selected?.stopReason && (
