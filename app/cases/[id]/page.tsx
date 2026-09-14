@@ -2,9 +2,13 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { canAccessCase, getCurrentUser } from "@/lib/auth";
+import { audit, verifyAuditChain } from "@/lib/audit";
 import { edgeCountLabel, evidenceTrail, hasValueTransfer } from "@/lib/format";
 import { GraphView } from "@/components/graph-view";
 import { SahyogButton } from "@/components/sahyog-button";
+import { ChainOfCustody } from "@/components/chain-of-custody";
+import { VaspResponseForm } from "@/components/vasp-response-form";
+import { CaseNarrative } from "@/components/case-narrative";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
@@ -14,7 +18,7 @@ import { AlertTriangle, ArrowLeft, FileText, Network, Shield, Wallet } from "luc
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
 import { VaspScoreGauge } from "@/components/vasp-score-gauge";
-import { VaspRecLine } from "@/components/vasp-rec-line";
+import { IssuerLeads, UnregisteredExchanges, VaspRecLine } from "@/components/vasp-rec-line";
 
 export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -28,6 +32,19 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   // existence, the same enumeration concern as the login route's identical
   // error for "no such user" vs. "wrong password".
   if (!kase || !canAccessCase(user, kase)) notFound();
+
+  await audit(user.id, "VIEW_CASE", kase.id, {});
+
+  // Chain of custody (ROADMAP: "who ran what, when, and what did the report
+  // say at the time" — a credibility feature for a tool whose output is
+  // meant to support legal process). Verified against the *whole* log's hash
+  // chain, not just this case's rows, since a tampered row anywhere breaks
+  // every hash after it.
+  const [caseEvents, allEvents] = await Promise.all([
+    prisma.auditEvent.findMany({ where: { caseId: kase.id }, orderBy: { createdAt: "asc" } }),
+    prisma.auditEvent.findMany({ orderBy: { id: "asc" } }),
+  ]);
+  const tamperedAtId = verifyAuditChain(allEvents);
 
   const graph: TraceGraph | null = kase.traceResult ? JSON.parse(kase.traceResult) : null;
   const typologyFlags: string[] = kase.typologyFlags ? JSON.parse(kase.typologyFlags) : [];
@@ -111,8 +128,12 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            No labeled VASP reached within {graph.maxDepth} hop{graph.maxDepth === 1 ? "" : "s"} — no disclosure
+            No registered VASP reached within {graph.maxDepth} hop{graph.maxDepth === 1 ? "" : "s"} — no disclosure
             request can be recommended for this trace.
+            <div className="mt-2 flex flex-col gap-3">
+              <UnregisteredExchanges graph={graph} />
+              <IssuerLeads graph={graph} />
+            </div>
             {/* The trace's own warnings say *why* — e.g. a chain with no
                 seeded labels (Arbitrum), or a truncated search — which is
                 the difference between "clean" and "couldn't tell". */}
@@ -143,8 +164,10 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
                 {graph.recommendation.alternatives.map((alt) => (
                   <VaspRecLine key={alt.address} rec={alt} />
                 ))}
+                <UnregisteredExchanges graph={graph} />
               </div>
             </div>
+            <IssuerLeads graph={graph} />
             <SahyogButton
               caseId={kase.id}
               vaspName={graph.recommendation.top.vaspName}
@@ -163,8 +186,21 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
                 }
               }
             />
+            {kase.status === "ROUTED" && (
+              <VaspResponseForm
+                caseId={kase.id}
+                vaspName={graph.recommendation.top.vaspName}
+                current={kase.vaspResponse}
+              />
+            )}
           </CardContent>
         </Card>
+      )}
+
+      <ChainOfCustody events={caseEvents} tamperedAtId={tamperedAtId} />
+
+      {graph && (
+        <CaseNarrative caseId={kase.id} hasNarrative={!!kase.narrativeDraft} initialText={kase.narrativeDraft} />
       )}
     </div>
   );
