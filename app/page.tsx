@@ -15,13 +15,15 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { GraphView } from "@/components/graph-view";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
-import { edgeCountLabel } from "@/lib/format";
+import { CHAIN_LABEL, edgeCountLabel } from "@/lib/format";
+import { ADDRESS_VALIDATORS, detectChains } from "@/lib/address";
+import type { Chain } from "@/lib/generated/prisma/client";
 import type { TraceGraph, TypologyFlag } from "@/lib/tracers/types";
 import { AlertTriangle, ArrowRight, Loader2, Network, Search, Shield, Wallet } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
 import { VaspScoreGauge } from "@/components/vasp-score-gauge";
-import { VaspRecLine } from "@/components/vasp-rec-line";
+import { IssuerLeads, UnregisteredExchanges, VaspRecLine } from "@/components/vasp-rec-line";
 
 const ADDRESS_PLACEHOLDER: Record<string, string> = {
   ETHEREUM: "0x… wallet address",
@@ -39,6 +41,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [graph, setGraph] = useState<TraceGraph | null>(null);
   const [caseId, setCaseId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const typologyFlags: TypologyFlag[] = graph
     ? Array.from(new Set(graph.nodes.flatMap((n) => n.typologyFlags)))
@@ -49,11 +52,26 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setGraph(null);
+    // The address formats name their chain family, so when the pasted address
+    // is invalid for the selected chain and valid on exactly one other, just
+    // switch and say so. A 0x address matches all three EVM chains — that
+    // stays the API's "which one did you mean" error, since guessing would
+    // trace the wrong chain.
+    const trimmed = address.trim();
+    const detected = detectChains(trimmed);
+    const traceChain =
+      !ADDRESS_VALIDATORS[chain as Chain].test(trimmed) && detected.length === 1 ? detected[0] : chain;
+    if (traceChain !== chain) setChain(traceChain);
+    setNotice(
+      traceChain !== chain
+        ? `Switched the chain selector to ${CHAIN_LABEL[traceChain as Chain]} — this address is only valid there.`
+        : null
+    );
     try {
       const res = await fetch("/api/trace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: address.trim(), chain, maxDepth }),
+        body: JSON.stringify({ address: trimmed, chain: traceChain, maxDepth }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Trace failed");
@@ -149,6 +167,7 @@ export default function Home() {
                 {loading ? "Tracing…" : "Run trace"}
               </Button>
             </div>
+            {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
             {error && <p className="text-sm text-destructive">{error}</p>}
           </CardContent>
         </Card>
@@ -219,9 +238,13 @@ export default function Home() {
               Recommended VASP for disclosure request
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            No labeled VASP reached within {graph.maxDepth} hop{graph.maxDepth === 1 ? "" : "s"} — no disclosure
-            request can be recommended for this trace.
+          <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
+            <p>
+              No registered VASP reached within {graph.maxDepth} hop{graph.maxDepth === 1 ? "" : "s"} — no disclosure
+              request can be recommended for this trace.
+            </p>
+            <UnregisteredExchanges graph={graph} />
+            <IssuerLeads graph={graph} />
           </CardContent>
         </Card>
       )}
@@ -243,7 +266,9 @@ export default function Home() {
               {graph.recommendation.alternatives.map((alt) => (
                 <VaspRecLine key={alt.address} rec={alt} />
               ))}
+              <UnregisteredExchanges graph={graph} />
             </div>
+            <IssuerLeads graph={graph} />
           </CardContent>
         </Card>
       )}
