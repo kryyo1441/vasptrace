@@ -9,13 +9,16 @@ export async function traceBitcoin(rootAddress: string, maxDepth: number): Promi
       chain: "BITCOIN",
       normalize: (a) => a, // base58/bech32 addresses are case-sensitive
       fetchOutgoing: async (address) => {
-        const transfers = await getOutgoingTransfers(address);
-        return transfers.map((t) => ({
-          to: t.to,
-          valueBaseUnits: t.valueSats,
-          txHash: t.txHash,
-          timestamp: t.timestamp,
-        }));
+        const { outgoing, coSpenders } = await getOutgoingTransfers(address);
+        return {
+          transfers: outgoing.map((t) => ({
+            to: t.to,
+            valueBaseUnits: t.valueSats,
+            txHash: t.txHash,
+            timestamp: t.timestamp,
+          })),
+          coSpenders,
+        };
       },
     },
     rootAddress,

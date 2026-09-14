@@ -11,7 +11,7 @@ export async function traceTron(rootAddress: string, maxDepth: number): Promise<
       normalize: (a) => a, // base58 addresses are case-sensitive
       fetchOutgoing: async (address) => {
         const [native, usdt] = await Promise.all([getOutgoingTransfers(address), getOutgoingUsdtTransfers(address)]);
-        return [...native, ...usdt];
+        return { transfers: [...native, ...usdt] };
       },
     },
     rootAddress,

@@ -5,7 +5,7 @@
 import { prisma } from "@/lib/prisma";
 import { recommendVasp } from "@/lib/scoring";
 import { applyTypologyFlags } from "@/lib/typology";
-import { applyConfidenceClustering } from "@/lib/clustering";
+import { applyCoSpendAttribution, applyConfidenceClustering } from "@/lib/clustering";
 import type { Chain } from "@/lib/generated/prisma/client";
 import type { NodeKind, TraceAsset, TraceEdge, TraceGraph, TraceNode } from "./types";
 
@@ -31,7 +31,9 @@ export interface ChainAdapter {
   // Base58/bech32 (BTC, TRON) addresses are case-sensitive; Ethereum's hex
   // addresses aren't, so its adapter normalizes to lowercase.
   normalize: (address: string) => string;
-  fetchOutgoing: (address: string) => Promise<RawTransfer[]>;
+  // coSpenders: addresses that signed inputs alongside this one, each with
+  // one evidence tx hash. Bitcoin only (UTXO inputs); account chains omit it.
+  fetchOutgoing: (address: string) => Promise<{ transfers: RawTransfer[]; coSpenders?: Map<string, string> }>;
 }
 
 export async function traceChain(adapter: ChainAdapter, rootAddress: string, maxDepth: number): Promise<TraceGraph> {
@@ -43,6 +45,7 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
   const nodes = new Map<string, TraceNode>();
   const edges: TraceEdge[] = [];
   const warnings: string[] = [];
+  const coSpendersByAddress = new Map<string, Map<string, string>>();
 
   // Arbitrum ships with no seeded labels (nothing there could be verified —
   // see prisma/seed.ts). Without this, its "No labeled VASP reached" state
@@ -80,7 +83,9 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
       // API pacing (rate-limit safety) lives in each chain's API client
       // (lib/etherscan.ts etc, via lib/rateLimit.ts) — global per-process,
       // not per-trace, so it also holds up under concurrent traces.
-      transfers = await adapter.fetchOutgoing(address);
+      const fetched = await adapter.fetchOutgoing(address);
+      transfers = fetched.transfers;
+      if (fetched.coSpenders) coSpendersByAddress.set(address, fetched.coSpenders);
     } catch (err) {
       node.stopReason = "API_ERROR";
       warnings.push(`Failed to fetch transactions for ${address}: ${(err as Error).message}`);
@@ -169,6 +174,10 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
 
   const vaspRegistry = await prisma.vaspRegistry.findMany();
   const nodeList = [...nodes.values()];
+  // Co-spend first: a same-wallet attribution is direct evidence, so it
+  // should win over the forwards-80%-to-an-exchange inference, which skips
+  // any node that already has a confidence.
+  applyCoSpendAttribution(nodeList, coSpendersByAddress, labelByAddress);
   applyConfidenceClustering(nodeList, edges);
   applyTypologyFlags(nodeList, edges);
 
@@ -179,6 +188,5 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
     nodes: nodeList,
     edges,
     warnings,
-    recommendation: recommendVasp(nodeList, vaspRegistry),
-  };
+    recommendation: recommendVasp(nodeList, vaspRegistry),  };
 }

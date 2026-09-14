@@ -65,7 +65,7 @@ function traceEvm(chain: keyof typeof CHAIN_ID, rootAddress: string, maxDepth: n
             asset: ERC20_ALLOWLIST[chainId][t.contractAddress.toLowerCase()],
           }));
 
-        return [...native, ...tokens];
+        return { transfers: [...native, ...tokens] };
       },
     },
     rootAddress,

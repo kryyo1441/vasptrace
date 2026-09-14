@@ -30,6 +30,10 @@ export interface TraceNode {
   // address arrives at exact-match "high" is self-evident, so this is only
   // populated for the inferred tiers.
   confidenceReason?: string;
+  // Set when the medium tier came from Bitcoin common-input ownership: this
+  // address was spent as an input together with `labeledAddress` in `txHash`.
+  // Absent on every other node and on cases stored before 2026-09-14.
+  coSpend?: { labeledAddress: string; labelType: string; txHash: string };
   stopReason: StopReason;
   typologyFlags: TypologyFlag[];
 }
@@ -90,6 +94,12 @@ export interface VaspRecommendation {
   entityName: string;
   vaspName: string;
   breakdown: VaspScoreBreakdown;
+  // Set when this VASP was reached by same-wallet inference (common-input
+  // ownership) rather than an exact label: the known VASP address the
+  // attributed address co-spent with, and the tx proving it. The Sahyog
+  // payload and draft then ask the VASP to confirm ownership first. Absent =
+  // exact label match, including every case stored before 2026-09-14.
+  sameWallet?: { labeledAddress: string; txHash: string };
 }
 
 export interface TraceGraph {
