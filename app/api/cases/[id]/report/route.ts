@@ -2,6 +2,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { prisma } from "@/lib/prisma";
 import { CaseReportDocument } from "@/lib/pdf/report";
 import { canAccessCase, getCurrentUser } from "@/lib/auth";
+import { audit } from "@/lib/audit";
 import type { TraceGraph } from "@/lib/tracers/types";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -25,6 +26,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const graph = JSON.parse(kase.traceResult) as TraceGraph;
   const buffer = await renderToBuffer(CaseReportDocument({ kase, graph }));
+  await audit(user.id, "DOWNLOAD_REPORT", kase.id, {});
 
   return new Response(new Uint8Array(buffer), {
     headers: {

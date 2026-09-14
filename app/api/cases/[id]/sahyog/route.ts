@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { notifyN8n } from "@/lib/n8n";
 import { evidenceTrail as buildEvidenceTrail, LEGAL_BASIS } from "@/lib/format";
 import { canAccessCase, getCurrentUser } from "@/lib/auth";
+import { audit } from "@/lib/audit";
 import type { TraceGraph } from "@/lib/tracers/types";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -62,6 +63,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // fire-and-forget contract as the trace webhook: never blocks or fails
   // the (already-simulated) routing that already happened above.
   const n8nWarning = await notifyN8n(process.env.N8N_SAHYOG_WEBHOOK_URL, simulatedPayload);
+
+  await audit(user.id, "ROUTE_SAHYOG", kase.id, { targetVasp: kase.recommendedVaspId, requestType: simulatedPayload.requestType });
 
   return NextResponse.json({
     simulated: true,
