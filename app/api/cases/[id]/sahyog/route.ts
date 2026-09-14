@@ -29,13 +29,27 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const graph = kase.traceResult ? (JSON.parse(kase.traceResult) as TraceGraph) : null;
   const evidenceTrail = buildEvidenceTrail(graph);
+  const top = graph?.recommendation?.top;
 
   const simulatedPayload = {
     caseId: kase.id,
-    requestType: "DISCLOSURE_REQUEST",
+    // A same-wallet inference (lib/scoring.ts) is not a confirmed label, so
+    // the request must say so and ask the VASP to confirm ownership before
+    // any disclosure — never assert the address is theirs.
+    requestType: top?.sameWallet ? "OWNERSHIP_CONFIRMATION_AND_DISCLOSURE_REQUEST" : "DISCLOSURE_REQUEST",
     suspectAddress: kase.address,
     chain: kase.chain,
     targetVasp: kase.recommendedVaspId,
+    attribution: top?.sameWallet
+      ? {
+          basis: "SAME_WALLET_INFERENCE",
+          method: "Common-input ownership",
+          attributedAddress: top.address,
+          knownVaspAddress: top.sameWallet.labeledAddress,
+          evidenceTx: top.sameWallet.txHash,
+          requestedAction: "CONFIRM_OWNERSHIP_BEFORE_DISCLOSURE",
+        }
+      : { basis: "EXACT_LABEL_MATCH", attributedAddress: top?.address ?? null },
     riskLevel: kase.riskLevel,
     legalBasis: LEGAL_BASIS,
     evidenceTrail,
