@@ -26,6 +26,9 @@ enum LabelType {
   RANSOMWARE
   BRIDGE
   UNKNOWN
+  // OFAC SDN-listed addresses, written only by the sanctions sync
+  // (lib/sanctions.ts) — never by hand. Added 2026-09-14.
+  SANCTIONED
 }
 
 // Real seed data: known exchange hot wallets, OFAC SDN crypto addresses,
@@ -50,6 +53,21 @@ model VaspRegistry {
   fiuindRegistered         Boolean
   hasIndiaNodalOfficer     Boolean
   responseReliabilityScore Int // 1-5
+}
+
+// Stablecoin issuers (ROADMAP item 3, added 2026-09-14). For a USDT/USDC
+// flow the actionable party may be the *issuer* (freeze), not the exchange
+// the funds reached — a different institution with a different process, so
+// deliberately not scored on VaspRegistry's formula: no India-specific
+// channel or reliability figure is publicly verifiable (see lib/scoring.ts's
+// unregisteredExchanges comment on the same honesty bar). Facts only.
+model IssuerRegistry {
+  id                 String  @id @default(cuid())
+  symbol             String  @unique // "USDT", "USDC" — matches TraceAsset.symbol
+  issuerName         String
+  freezeProcess      String
+  requiresCourtOrder Boolean
+  sourceUrl          String
 }
 
 enum CaseStatus {
@@ -84,7 +102,67 @@ model User {
   passwordSalt String
   role         Role   @default(INVESTIGATOR)
   cases        Case[]
+  watches      Watch[]
   createdAt    DateTime @default(now())
+}
+
+// Chain of custody (added 2026-09-14). Append-only — nothing in the app
+// updates or deletes these rows — and hash-chained: each row's `hash` is
+// sha256 over its own content plus the previous row's hash, so an edited or
+// deleted row breaks every hash after it (lib/audit.ts verifyAuditChain).
+// Tamper-evident, not tamper-proof: someone with write access to dev.db can
+// rewrite the whole chain; anchoring the head hash somewhere external is the
+// upgrade.
+model AuditEvent {
+  id        Int      @id @default(autoincrement())
+  userId    String?
+  action    String
+  caseId    String?
+  detail    String // JSON
+  prevHash  String
+  hash      String
+  createdAt DateTime @default(now())
+
+  @@index([caseId])
+}
+
+// Address monitoring (ROADMAP item 6, added 2026-09-14). A watch alerts on
+// outgoing transfers newer than `lastSeenTimestamp`; checks run on demand or
+// from anything that can POST /api/watches/check on a schedule (cron, n8n)
+// with an API token — there's no in-app worker.
+model Watch {
+  id                String       @id @default(cuid())
+  address           String
+  chain             Chain
+  createdById       String
+  createdBy         User         @relation(fields: [createdById], references: [id])
+  lastSeenTimestamp Int?
+  lastCheckedAt     DateTime?
+  createdAt         DateTime     @default(now())
+  alerts            WatchAlert[]
+
+  @@unique([address, chain, createdById])
+}
+
+model WatchAlert {
+  id             String   @id @default(cuid())
+  watchId        String
+  watch          Watch    @relation(fields: [watchId], references: [id], onDelete: Cascade)
+  txHash         String
+  toAddress      String
+  valueBaseUnits String
+  // "" = native. Not nullable: a composite @@unique across a nullable column
+  // doesn't dedupe the way an empty-string sentinel does, and this codebase
+  // already uses the same "" = native convention for the asset aggregation
+  // key in lib/tracers/bfs.ts.
+  assetSymbol    String @default("")
+  // Set when the destination is a labeled address — the actionable alert.
+  entityName     String?
+  labelType      String?
+  txTimestamp    Int
+  createdAt      DateTime @default(now())
+
+  @@unique([watchId, txHash, toAddress, assetSymbol])
 }
 
 model Case {
@@ -96,9 +174,21 @@ model Case {
   recommendedVaspId  String?
   traceResult        String? // JSON blob: full graph (nodes/edges) from the last trace
   typologyFlags      String? // JSON array of detected pattern names
-  // Roadmap only, unused: would flip once a VASP confirms/denies a disclosure
-  // request back through a real Sahyog integration.
+  // The VASP-response feedback loop (2026-09-14): an investigator records what
+  // the VASP answered to a routed request. `vaspResponse` is CONFIRMED |
+  // DENIED | NO_RESPONSE; confirmedByVaspResponse mirrors CONFIRMED so the
+  // day-1 field finally means something. Observed response rates are shown
+  // next to the seeded reliability score, never written over it.
   confirmedByVaspResponse Boolean @default(false)
+  vaspResponse            String?
+  vaspRespondedAt         DateTime?
+  // LLM-drafted case narrative (ROADMAP "smaller items"), added 2026-09-14.
+  // Prose only — drafted from the already-computed structured trace, never
+  // touching riskLevel/recommendedVaspId/typologyFlags. Stored so a redraft
+  // isn't required on every page view (real API cost) and so the PDF/case
+  // page always show what was actually reviewed, not a live re-generation.
+  narrativeDraft          String?
+  narrativeDraftedAt      DateTime?
   // Nullable, not required — the 81 cases traced before auth existed have no
   // creator. Backfilled to a seeded demo investigator (see prisma/seed.ts)
   // rather than left null, so the dashboard/pitch numbers ("81 real cases")
