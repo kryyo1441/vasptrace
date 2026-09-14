@@ -322,16 +322,19 @@ sed -i 's|/webhook-test/vasptrace-|/webhook/vasptrace-|g' .env
 | `0x1b8214682dee1c3d240e7241ef4e278854a2cdf3` | ETH | 1 | ~1s | Binance 14 — backup |
 | `1CRLGcaXajtWVF5EopZgQUqE12dKn8Rtuh` | BTC | 1 | **0.9s** | Binance — most stable BTC pick |
 | `TZ44qjhyXiqfW8rXr5U7tAgfS6qdtKKSGD` | TRON | 1 | ~1s | Bitfinex |
-| `3FrmCRcGKiTATfreBDM9F17yAUDoDsnWeA` | BTC | **5** | **~25s** | 60 nodes, HIGH risk, FAN_OUT + PEEL_CHAIN, Binance at hop 4 |
+| `3FrmCRcGKiTATfreBDM9F17yAUDoDsnWeA` | BTC | **5** | **~25s** | 60 nodes, HIGH risk, FAN_OUT + PEEL_CHAIN; **Binance at hop 0, score 5, by same-wallet inference** — the button reads "Route ownership-confirmation request to Binance" |
 
-**On `3Frm…`:** it is the only address that shows a *messy, realistic*
-multi-hop laundering trail — everything else is a clean one-hop graph. But it
-costs ~25 seconds of dead air, and it is not pre-verified against drift to
-the same standard as the curated set.
+**On `3Frm…` — corrected 2026-09-14:** this used to be pitched as a *messy,
+realistic multi-hop laundering trail*. It isn't one. The address itself
+co-spends inputs with the seeded Binance cold wallet, as do four nodes
+downstream, so the graph is Binance moving its own funds and the "peel chain"
+flag is firing on exchange consolidation. **Don't narrate it as laundering.**
 
-Use it only if you have time to fill and a story to tell while it runs
-("watch the node count climb — this is what a real peel chain looks like").
-Otherwise stick to the 1-hop addresses. Never open with it.
+What it *does* show well is item 2's same-wallet recommendation: an address from a
+"suspicious wallets" dataset turns out, on-chain, to be exchange-controlled,
+with the transaction that proves it. That's a true and useful story — tell
+that one, while the ~25s trace runs. Otherwise stick to the 1-hop addresses.
+Never open with it.
 
 Full provenance for every address is in
 [`DEMO_ADDRESSES.md`](./DEMO_ADDRESSES.md); re-verify the curated nine before

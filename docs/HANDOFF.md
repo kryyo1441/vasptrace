@@ -250,7 +250,13 @@ don't redo this from scratch:
 `3FrmCRcGKiTATfreBDM9F17yAUDoDsnWeA` — Bitcoin, **max depth 5**. Produces 60
 nodes, HIGH risk, FAN_OUT + PEEL_CHAIN, reaches **Binance (cold wallet) at
 hop 4** with a real recommendation, so the full path (recommendation → PDF →
-Sahyog routing) is demonstrable. Backups that give good graphs and flags but
+Sahyog routing) is demonstrable. **But it is not a suspect's laundering
+trail (found 2026-09-14):** the address itself co-spends inputs with that
+same Binance cold wallet, as do four downstream nodes, so it is almost
+certainly Binance's own wallet and the flags are firing on exchange
+consolidation. It now recommends Binance at hop 0 by same-wallet inference,
+routed as an ownership-confirmation request — narrate it as that, per
+`DEMO_SCRIPT.md`. Backups that give good graphs and flags but
 end at the "no VASP reached" state: `155Yv6Hmzs5RT8j6uZAzfWzecvV9FDyu6k`,
 `1CYYS3R6CKD43nCxFbqvEvjr3VUScKswBw`, `3P9WebHkiDxCi8LDXiRQp8atNEagcQeRA3`.
 Note these are *live* addresses — re-verify them before demo day, the same
@@ -299,7 +305,10 @@ All logged in `PROGRESS.md`, but worth having front-of-mind:
 - **Service-worker hijack.** A leftover service worker from a different
   project ("bookish") can take over `localhost:3000` and serve a stale
   bundle. Check DevTools → Application → Service Workers if the UI ever
-  looks a version behind the source.
+  looks a version behind the source. **Hit again 2026-09-14** in the
+  browser-extension Chrome profile, after a `.next` clear and restart had
+  already failed to help. Check this *first*:
+  `navigator.serviceWorker.controller` non-null on `localhost:3000` is the tell.
 - **This is Next.js 16** — file conventions differ from training data
   (`middleware.ts` → `proxy.ts` already bit us; the old name silently does
   nothing). Read `node_modules/next/dist/docs/` before assuming an API works
@@ -349,6 +358,19 @@ All logged in `PROGRESS.md`, but worth having front-of-mind:
   deliberately (renaming costs a migration for zero behaviour change), but
   don't "fix" the fallback without understanding it, and don't assume the
   column is a foreign key. `Case.createdById` *is* a real FK.
+- **`node not found: <address>` in the browser console is a known bug, not
+  your change** (found 2026-09-14). A trace that hits `NODE_BUDGET` still
+  pushes the edge to a destination `bfs.ts` didn't add as a node, and
+  `react-force-graph` throws on it (Next's "1 Issue" badge). The graph still
+  renders. Unfixed: see `PROGRESS.md` 2026-09-14.
+- **Bitcoin nodes can carry "<label> — same wallet"** (medium confidence,
+  common-input ownership, `ROADMAP.md` item 2). It is not an exact match. A
+  same-wallet *exchange* match **does** route (user decision 2026-09-14): the
+  recommendation carries `sameWallet`, the Sahyog payload sends
+  `attribution.basis: "SAME_WALLET_INFERENCE"`, and the email draft asks the
+  VASP to confirm ownership before disclosing. Any new consumer of
+  `recommendation` must preserve that wording — never present it as a
+  confirmed label.
 - **n8n test webhooks are one-shot.** Click "Execute workflow" before *every*
   trigger, and the two workflows arm separately. See item 1 above.
 

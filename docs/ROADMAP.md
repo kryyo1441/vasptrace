@@ -268,7 +268,63 @@ the graph question this raises — one edge per asset, or one edge per
 counterparty with assets summed. (Native + USDT to the same address is two
 transfers but arguably one relationship.)
 
-## 2. Bitcoin common-input-ownership clustering
+## 2. Bitcoin common-input-ownership clustering — SHIPPED 2026-09-14 (attribution only)
+
+### What shipped
+
+- **Zero extra API calls.** Esplora's `/address/:addr/txs` — the response
+  the tracer already fetched — carries every input's
+  `prevout.scriptpubkey_address`. `lib/blockstream.ts` now returns the
+  address's **co-spenders** (addresses signed as inputs in the same tx, one
+  evidence txid each) alongside its outgoing transfers.
+- **CoinJoin guard** (`isLikelyCoinJoin`): ≥2 input owners, ≥3 outputs and a
+  repeated output value → the tx's inputs are not read as one owner. Fired on
+  6 txs across the three no-VASP dataset addresses, so it isn't theoretical.
+  PayJoin is undetectable by design (`ponytail:` note).
+- **`applyCoSpendAttribution`** (`lib/clustering.ts`): an unlabeled node that
+  co-spent with a labeled address gets `confidence: "medium"`,
+  `entityName: "<label> — same wallet"`, and a reason naming the labeled
+  address and the txid. Runs before the 80%-forward rule so direct evidence
+  wins. **Nodes are annotated, never merged**, so the graph still shows which
+  address transacted and the 88 stored cases render unchanged. The root keeps
+  `kind: SUSPECT`.
+- **Medium, not high — so it does not route a disclosure request.**
+  `recommendVasp` still only takes exact matches. This is the open decision
+  below.
+
+**Measured 2026-09-14** (library calls, depth 5, no `Case` rows):
+`3FrmCRcG…` — **the suspect address itself co-spends with the seeded Binance
+cold wallet**, as do 4 more nodes at hops 1-3. Graph, risk (HIGH), flags
+(FAN_OUT + PEEL_CHAIN) and recommendation (Binance @ hop 4) unchanged;
+26.5s vs the 25.5s baseline. The three no-VASP backups got 0 attributions.
+Expanding the labeled addresses into their own clusters first added nothing
+beyond direct peers, so it wasn't built.
+
+**Routable, with confirm-ownership wording (user decision, later
+2026-09-14):** an exchange reached only by co-spend enters `recommendation`
+with a `sameWallet` basis and its evidence tx. Recommendations are one per
+VASP; at equal score an exact label beats an inference. Everywhere it
+surfaces it's named as an inference: the rec line on `/` and the case page
+(with the evidence underneath), an "Attribution basis" row in the PDF, the
+Sahyog payload (`requestType: OWNERSHIP_CONFIRMATION_AND_DISCLOSURE_REQUEST`,
+`attribution.basis: SAME_WALLET_INFERENCE`), and the email draft, which asks
+the VASP to confirm the address is theirs before disclosing anything and to
+say so if it isn't. This is the item's original payoff: a "no VASP" Bitcoin
+trace can now produce a request when it only reaches an exchange's wallet
+through co-spent inputs.
+
+**Still open:**
+- **Exchanges missing from the registry produce nothing.** `recommendVasp`
+  skips an `entityName` absent from `vaspRegistry` (exact or inferred),
+  so a niche or offshore exchange that *is* labeled still yields no
+  recommendation or lead. It should surface as "exchange reached, not in the
+  actionability registry".
+- Change detection: a vout to a co-spender is almost certainly change but
+  still draws as a hop; dropping it would move PEEL_CHAIN output.
+- Transitive clustering (union-find across the trace) and paging past the
+  ~25-tx window.
+
+### Original write-up
 
 **What.** If two addresses appear as inputs to the same transaction they are
 almost certainly the same wallet. This is the standard Bitcoin forensics

@@ -222,8 +222,12 @@ score = (FIU-IND registered ? 3 : 0)
       − hop distance
 ```
 
-Only exact-match, `high`-confidence exchange nodes are scored at all — a
-clustering guess can never outrank a real match, however high its score.
+Exact-match, `high`-confidence exchange nodes are scored. So, on Bitcoin, is
+an address proven to share a wallet with a known exchange address
+(common-input ownership), but it routes only as an **ownership-confirmation
+request** that names the inference and the transaction behind it. At equal
+score the exact match wins. Behavioral guesses (value-forwarding, fan-in
+patterns) are never scored.
 
 **Worked example**: a trace reaches two exchanges — one 1 hop away but
 offshore and unregistered, one 3 hops away but FIU-IND registered with a

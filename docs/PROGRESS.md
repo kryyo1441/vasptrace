@@ -11,7 +11,7 @@ history.
 | 1 | Multi-chain tracer | **Done** — Ethereum, Bitcoin (Blockstream), Tron (Tronscan) all live. Shared BFS engine (`lib/tracers/bfs.ts`), thin per-chain adapters. **Scope: native + stablecoins** since 2026-09-13 — ETH + USDT/USDC (ERC-20), TRX + USDT (TRC-20), BTC native; other tokens not traced (`ROADMAP.md` item 1). **Polygon and Arbitrum** added 2026-09-13 through the same Etherscan v2 adapter (Arbitrum has no labels yet). Edges carry `kind: TRANSFER \| CONTRACT_CALL` since 2026-09-12 so a zero-value contract call can't read as a payment (`ROADMAP.md` item 0). |
 | 2 | Labeled address DB | **Done** — real seed data (exchange hot wallets, Tornado Cash, OFAC SDN, one Tron exchange address). |
 | 3 | Legal-actionability scoring | **Done** — `lib/scoring.ts`, wired into the trace response, rendered on `/` and the case detail page. |
-| 4 | Confidence scoring (high/medium/low) | **Done** — `lib/clustering.ts`: medium = forwards ≥80% of value to a known exchange, low = fan-in from ≥3 senders that forwards onward. Excluded from VASP recommendation (only exact-match routes a disclosure request). |
+| 4 | Confidence scoring (high/medium/low) | **Done** — `lib/clustering.ts`: medium = forwards ≥80% of value to a known exchange, low = fan-in from ≥3 senders that forwards onward. Excluded from VASP recommendation (only exact-match routes a disclosure request). Since 2026-09-14 also medium: Bitcoin common-input ownership ("same wallet" as a labeled address, CoinJoins skipped — `ROADMAP.md` item 2). |
 | 5 | Graph visualization | **Done** — force-directed graph, color coding, click → detail sheet, edge tooltips, per-chain unit formatting (ETH/BTC/TRX). Day 4: custom node paint (suspect glow, flag rings, on-canvas labels), curved links with directional particles, and a per-trace legend. |
 | 6 | n8n workflow visualization | **Done, rehearsed live** — `docker-compose.yml` + two workflows in `n8n/workflows/`, fire-and-forget notify (`lib/n8n.ts`) from the trace and Sahyog routes. n8n is optional and never blocks/fails either flow — verified live with an unreachable webhook URL. Both workflows also run for real against `n8nio/n8n:latest`: imported, activated, and confirmed on the canvas from a real trace and a real Sahyog click (Day 3 — fixed a dead `typeVersion: 1` IF node and a webhook `body`-unwrap bug found only by running it). |
 | 7 | Case dashboard | **Done** — every trace persists as a `Case` (`/api/trace`), listed at `/cases`, each row links to a detail page at `/cases/[id]`. |
@@ -1143,7 +1143,158 @@ Asked for "more wallets than Bitcoin, Tron and ETH". **Not committed.**
   returned 200, and the test row was deleted (count back to 88).
 - Not browser-verified (extension not connected; login is a password).
 
+### 2026-09-14 — ROADMAP item 2: Bitcoin common-input ownership (attribution only)
+
+**Not committed.** Full write-up in `ROADMAP.md` item 2.
+
+- Measured before building (a throwaway Python BFS against Blockstream,
+  mirroring the tracer's fanout/budget): co-input data is already in the
+  `/address/:addr/txs` response, so this costs **no extra API calls**; direct
+  co-spenders attributed 5 of 60 nodes on `3FrmCRcG…` to Binance and 0 on the
+  three backups; growing the labels into their own clusters first added
+  nothing, so it wasn't built.
+- `lib/blockstream.ts`: returns `coSpenders` (address → evidence txid) with
+  a CoinJoin shape guard. `ChainAdapter.fetchOutgoing` now returns
+  `{ transfers, coSpenders? }`; ETH/Tron adapters just wrap their arrays.
+- `lib/clustering.ts`: `applyCoSpendAttribution` → medium confidence,
+  "<label> — same wallet", reason cites the labeled address and txid. Runs
+  before the 80%-forward rule. Nodes annotated, not merged; root stays
+  SUSPECT. **Not routable** (medium), so recommendations are unchanged.
+- **Finding:** the dataset's best demo address `3FrmCRcG…` is itself in the
+  same wallet as the seeded Binance cold wallet — the "suspect" is very
+  likely an exchange-controlled address.
+- Verified live via `traceBitcoin` (script deleted, Case count still 88):
+  `3Frm…` 60 nodes / HIGH / FAN_OUT+PEEL_CHAIN / Binance @ hop 4 / 26.5s —
+  baseline held; `155Yv…` no attributions; `1CRL…` depth 1 unchanged.
+  `clustering.test.ts` extended (attribution precedence, root kind, CoinJoin
+  shapes); all 5 self-checks, `tsc`, `eslint` pass.
+- **Browser-verified** (user logged in; one real `3Frm…` trace through the
+  form, case deleted afterwards, count back to 88): the graph hover label on
+  the suspect root reads `Binance (cold wallet) — same wallet (SUSPECT)`, and
+  the recommendation card is unchanged (Binance, 4 hops, score 1).
+- **Real overflow bug caught there:** the co-spend reason carries a 64-char
+  txid, and the node-detail sheet's reason line rendered 408px wide inside a
+  351px column. Added `wrap-anywhere` in `components/graph-view.tsx`
+  (verified live after the fix below: computed `overflow-wrap: anywhere`,
+  351px in a 351px column).
+- **The `bookish-v1` service worker was back** — third time on this project.
+  The page kept a byte-identical stylesheet without the new utility through
+  a `.next` clear and a dev-server restart, which looked like a stale
+  Turbopack cache and wasn't: `navigator.serviceWorker.controller` was
+  `localhost:3000/sw.js` with cache `bookish-v1`. Compiling
+  `app/globals.css` through `@tailwindcss/postcss` directly had already shown
+  the class was emitted. Unregistered the worker and deleted the cache; the
+  new CSS applied on the next load. Lesson: check the service worker
+  *before* restarting anything.
+- **Pre-existing bug surfaced, not fixed:** when a trace hits `NODE_BUDGET`,
+  `bfs.ts` still pushes the edge to a destination it didn't add as a node.
+  `react-force-graph` then throws `node not found: <address>` (Next's "1
+  Issue" badge). 2 of the 89 stored cases at the time had such dangling edges,
+  both budget-truncated, one Ethereum from before this work. The graph still
+  renders. Fix belongs in `bfs.ts` (don't push an edge whose node wasn't
+  added) plus a render-side filter for the stored blobs; it changes edge
+  counts on truncated traces, so it's left for a separate decision.
+- The node-detail sheet itself couldn't be opened by the browser tool (canvas
+  clicks kept landing mid re-fit); the wrap fix was measured on an element
+  with the sheet's exact classes and width instead.
+
+### 2026-09-14 (later) — Same-wallet leads, and the `3Frm…` demo story corrected
+
+Asked to "do what's viable for an investigator" on the two open questions.
+**Not committed.**
+
+- **Same-wallet exchange matches are now leads, not recommendations.**
+  `sameWalletLeads` (`lib/scoring.ts`) scores co-spend exchange nodes with
+  the same actionability arithmetic, one per VASP (best score, then nearest
+  hop), into `TraceGraph.sameWalletLeads`. `recommendVasp` is unchanged and
+  still exact-match only, so a lead never reaches the Sahyog payload or the
+  email draft. Rendered as its own card on `/` and `/cases/[id]`
+  (`components/same-wallet-leads.tsx`) and as a PDF section headed "not a
+  basis for this request", each citing the labeled address and the txid
+  (`sameWalletEvidence` in `lib/format.ts`). `TraceNode.coSpend` carries the
+  evidence; both new fields are optional, so stored cases render unchanged.
+- **Deliberately not done: making a lead routable.** It changes what a
+  Section 91 draft asserts, so it waits for an explicit yes. If approved: let
+  `recommendVasp` accept `coSpend.labelType === "EXCHANGE"` nodes, and make
+  the payload and draft state the basis and ask the VASP to *confirm* the
+  address is theirs.
+- **Measured** (library, no Case rows): `3Frm…` still recommends Binance @
+  hop 4, score 1, and now also shows lead Binance @ hop 0, score 5 (5
+  co-spend nodes across 4 evidence txs, one shared by two nodes). `1CRL…`
+  unchanged (Binance @ hop 1, score 4, no leads).
+- **Browser-verified** (one real trace, case deleted, count back to 88):
+  lead card text and evidence on `/` and the case page, no overflow at
+  desktop or at a 327px card width, and the PDF (inflated and decoded in the
+  page) contains the section, the txid, the labeled address and "score 5 (0
+  hops)".
+- **Demo docs corrected:** `DEMO_ADDRESSES.md`, `DEMO_SCRIPT.md` and
+  `HANDOFF.md` no longer pitch `3Frm…` as a laundering trail. It is almost
+  certainly Binance's own wallet, and the peel-chain flag fires on exchange
+  consolidation.
+- Checks: `scoring.test.ts` (lead dedupe, score, evidence, mixer exclusion,
+  never in `recommendVasp`) and `clustering.test.ts` (`coSpend` set); all 5
+  self-checks, `tsc`, `eslint` pass.
+
+### 2026-09-14 (latest) — Same-wallet matches route, as ownership-confirmation requests
+
+User decision: "make leads routable with the confirm-ownership wording".
+**Supersedes the separate leads card from the entry above. Not committed.**
+
+- **`recommendVasp` accepts co-spend exchange nodes** (`coSpend.labelType ===
+  "EXCHANGE"`), carrying `sameWallet: { labeledAddress, txHash }` on the
+  recommendation. Recommendations are now **one per VASP**. Ranking is score
+  first, then exact label over inference, then nearest hop. The forwards-80%
+  and fan-in guesses still never route. `TraceGraph.sameWalletLeads` and
+  `components/same-wallet-leads.tsx` are removed; no stored case ever had the
+  field.
+- **The inference is named everywhere it surfaces:**
+  - `vaspLine` appends "same-wallet inference — confirm ownership", and
+    `components/vasp-rec-line.tsx` prints the evidence under it on `/` and
+    `/cases/[id]`.
+  - The PDF has an "Attribution basis" row plus the evidence.
+  - The Sahyog payload sends `requestType:
+    OWNERSHIP_CONFIRMATION_AND_DISCLOSURE_REQUEST` and `attribution: { basis:
+    SAME_WALLET_INFERENCE, method, attributedAddress, knownVaspAddress,
+    evidenceTx, requestedAction: CONFIRM_OWNERSHIP_BEFORE_DISCLOSURE }`.
+    Exact cases send `basis: EXACT_LABEL_MATCH`.
+  - The button reads "Route ownership-confirmation request to X".
+  - The email draft states it's an inference and cites the tx and the known
+    address. It asks the VASP to confirm ownership first, requests KYC only
+    if it's confirmed, and asks to be told if not.
+- **Verified live** (one trace of `3Frm…`, routed, case deleted, count back
+  to 88):
+  - The card reads `Binance — 0 hops … score 5 · same-wallet inference —
+    confirm ownership` with the evidence line, and no duplicate Binance.
+  - The stored top has `sameWallet`, and no alternatives.
+  - The button label and payload `requestType`/`attribution` values match
+    (compared in the page).
+  - The draft text was captured by intercepting `clipboard.writeText`.
+  - The PDF contains the basis row, the tx and the known address.
+  - Fixed from reading the captured draft: at hop 0 the attributed address
+    *is* the suspect, and the draft named it twice.
+- **`buildEmailDraft` moved from `components/sahyog-button.tsx` into
+  `lib/format.ts`** so the legal wording is finally testable. Nothing could
+  reach it before, which is how the 2026-09-12 "received funds" bug survived a
+  first pass. The hop-0 fix was then verified by assertion rather than by
+  another live trace. That also caught the fix's own flaw: a ~130-character
+  line in a draft that otherwise wraps at 70.
+- **An older rule was still stated as current** in `lib/clustering.ts`'s
+  comment, `PITCH.md` (scoring section) and `EXPLAINER.md` (label DB, "who
+  gets scored", principle 3): "only an exact match routes". All three now
+  describe the two bases and the ownership-confirmation condition.
+- Checks: `scoring.test.ts` (routes, per-VASP dedupe including two exact
+  labels of one VASP, exact beats inference on a tie, mixer co-spend
+  excluded, exact-only unchanged) and `format.test.ts` (`vaspLine` basis
+  suffix, `sameWalletEvidence`, and the draft: hop 0 names the address once,
+  hop 2 names both, every line ≤80 chars, no "received funds" in an inference
+  draft, exact drafts unchanged). All 5 self-checks, `tsc` and `eslint` pass.
+  An exact-match case page (not routed) still reads "Route disclosure request
+  to Binance" with no inference text.
+
 ## Next up
+
+**Updated 2026-09-14:** item 2 is done. Same-wallet exchange matches route
+as ownership-confirmation requests. Item 3 (issuer freeze paths) is next.
 
 **Updated 2026-09-13:** `ROADMAP.md` items 0 and 1 have both shipped. Item 2
 (BTC common-input clustering) or item 3 (issuer freeze paths, which item 1

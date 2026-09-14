@@ -56,13 +56,14 @@ profiled and sample-traced; the full findings are in
 
 | Address | Hits | Notes |
 |---|---|---|
-| `3FrmCRcGKiTATfreBDM9F17yAUDoDsnWeA` | Binance (cold wallet) @ hop 4 | needs **maxDepth 5**, unlike everything above. HIGH risk, FAN_OUT + PEEL_CHAIN — the best "messy real laundering trail" visual we have, vs. the clean 1-hop addresses above. Two cautions, both measured 2026-09-10: it renders 60 nodes because it *hits* `NODE_BUDGET` and truncates, not because the graph is that size (at budget 150 it draws 150 and still truncates, with an identical Binance/risk/flags result — see `PROGRESS.md`); and it takes **~25s** to trace (vs. ~1s for the curated one-hop addresses above, which stop on a label immediately), so narrate over the wait |
+| `3FrmCRcGKiTATfreBDM9F17yAUDoDsnWeA` | **Binance @ hop 0, score 5 — same-wallet inference**, routed as an ownership-confirmation request (the exact Binance label at hop 4 is the same VASP, so it's folded in) | needs **maxDepth 5**, unlike everything above. HIGH risk, FAN_OUT + PEEL_CHAIN. **Corrected 2026-09-14 — this is not a laundering trail.** Common-input ownership shows the address *itself* co-spends with the seeded Binance cold wallet `3M219KR5…` (tx `716cca21…`), and so do 4 more nodes at hops 1-3 (txs `a66e02cd…` ×2, `779106c3…`, `eb013fac…`). The graph is almost certainly Binance moving its own funds, and the typology flags are firing on exchange consolidation. If you demo it, the story is "the tool caught that a wallet from a 'suspicious' dataset is an exchange's own", not "watch the money get laundered into Binance". Two cautions, both measured 2026-09-10: it renders 60 nodes because it *hits* `NODE_BUDGET` and truncates, not because the graph is that size (at budget 150 it draws 150 and still truncates, with an identical Binance/risk/flags result — see `PROGRESS.md`); and it takes **~25s** to trace (vs. ~1s for the curated one-hop addresses above, which stop on a label immediately), so narrate over the wait |
 
 Two caveats before relying on it: it is **not** pre-verified to the same
 standard as the table above (it was traced once, not re-checked for drift),
 and at depth 5 it hits the 60-node budget cap, so the trail is truncated.
-The 1-hop addresses above remain the safe headline picks; this one is for
-showing what a *realistic* multi-hop trace looks like.
+The 1-hop addresses above remain the safe headline picks. This one shows a
+multi-hop graph and a same-wallet (ownership-confirmation) recommendation, but no longer stands in for a
+suspect's laundering path (see the correction in the table).
 
 ## Polygon and Arbitrum (Etherscan v2) — added 2026-09-13
 

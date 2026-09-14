@@ -1001,10 +1001,12 @@ individually verified against a block explorer's public tag or the sanctions
 designation itself. The reasoning: this feeds law-enforcement work, and a wrong
 "this address is X" is worse than no label at all.
 
-**Why this matters to the recommendation.** Only an *exact* label match can
-produce a disclosure recommendation (feature 3). The label DB's breadth
-therefore directly controls how often a trace ends with an actionable answer.
-Bitcoin is the thin spot: only 2 of 15 exchange labels are Bitcoin.
+**Why this matters to the recommendation.** A disclosure recommendation needs
+a label (feature 3): either an *exact* match, or on Bitcoin an address in the
+same wallet as a labeled exchange address. The label DB's breadth therefore
+directly controls how often a trace ends with an actionable answer. Bitcoin
+is the thin spot: only 2 of 15 exchange labels are Bitcoin. Common-input
+clustering (2026-09-14) stretches those few labels across whole wallets.
 
 ### Feature 3 — Legal-actionability scoring (the differentiator)
 
@@ -1052,13 +1054,20 @@ The weights say: being inside the Indian regulatory perimeter (3) matters more
 than having a local contact (2), both matter a lot relative to one extra hop
 (−1), and a very reliable responder can outweigh a couple of hops.
 
-**Who gets scored.** A node is a candidate only if **all** of these hold:
+**Who gets scored.** A node is a candidate if its entity name maps to a
+registry entry and it has one of two bases:
 
-- its kind is `EXCHANGE`,
-- its confidence is `high` (exact label match — never a medium/low guess),
-- its entity name maps to a registry entry. The match uses the first word of
-  the label's entity name, so `"WazirX Exchange Hot Wallet"` → `WazirX`,
-  `"Binance (cold wallet)"` → `Binance`.
+- **Exact label:** its kind is `EXCHANGE` and its confidence is `high`.
+- **Same-wallet inference** (Bitcoin only, since 2026-09-14): it spent inputs
+  in one transaction together with a labeled exchange address, so one signer
+  controls both. It carries that address and txid as `sameWallet`, and the
+  request it produces asks the exchange to **confirm ownership** before
+  disclosing anything.
+
+No other medium/low guess is ever a candidate. The registry match uses the
+first word of the entity name, so `"WazirX Exchange Hot Wallet"` → `WazirX`,
+`"Binance (cold wallet)"` → `Binance`. Candidates collapse to one per VASP,
+and at equal score an exact label beats an inference.
 
 Candidates are sorted by score; the top one is the recommendation and the rest
 are listed as alternatives. If there are no candidates, the result is `null`
@@ -1669,10 +1678,13 @@ heuristics. There is no AI/ML black box anywhere in the scoring. An
 investigator, a supervisor or a defense lawyer can see exactly why the tool
 said what it said, and disagree with it.
 
-**3. It separates facts from guesses, and guesses can't drive legal action.**
-Three confidence tiers, and only an exact, verified label can produce a
-disclosure recommendation. A behavioral inference can draw attention but can
-never become the basis of a legal request.
+**3. It separates facts from guesses, and a guess never passes as a fact in a
+legal request.** There are three confidence tiers. An exact, verified label
+produces a disclosure recommendation. So can one structural inference:
+Bitcoin common-input ownership with a known exchange address. That one goes
+out only as an ownership-confirmation request, naming the inference and the
+transaction behind it. Behavioral inferences (value-forwarding, fan-in
+patterns) can draw attention but never become the basis of a request.
 
 **4. It won't let a weaker fact borrow the language of a stronger one.** A
 zero-value contract call is never drawn, counted or cited as a payment, and the
