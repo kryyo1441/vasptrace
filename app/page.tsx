@@ -15,12 +15,13 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { GraphView } from "@/components/graph-view";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
-import { edgeCountLabel, vaspLine } from "@/lib/format";
+import { edgeCountLabel } from "@/lib/format";
 import type { TraceGraph, TypologyFlag } from "@/lib/tracers/types";
 import { AlertTriangle, ArrowRight, Loader2, Network, Search, Shield, Wallet } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
 import { VaspScoreGauge } from "@/components/vasp-score-gauge";
+import { VaspRecLine } from "@/components/vasp-rec-line";
 
 const ADDRESS_PLACEHOLDER: Record<string, string> = {
   ETHEREUM: "0x… wallet address",
@@ -238,11 +239,9 @@ export default function Home() {
           <CardContent className="flex flex-col items-center gap-4 sm:flex-row">
             <VaspScoreGauge rec={graph.recommendation.top} />
             <div className="flex flex-1 flex-col gap-2 text-sm">
-              <p className="font-medium text-foreground">{vaspLine(graph.recommendation.top)}</p>
+              <VaspRecLine rec={graph.recommendation.top} primary />
               {graph.recommendation.alternatives.map((alt) => (
-                <p key={alt.address} className="text-muted-foreground">
-                  {vaspLine(alt)}
-                </p>
+                <VaspRecLine key={alt.address} rec={alt} />
               ))}
             </div>
           </CardContent>
