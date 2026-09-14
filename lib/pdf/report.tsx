@@ -3,7 +3,7 @@
 // the report always matches exactly what was shown on screen at trace time.
 import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
-import { edgeCountLabel, isContractCall } from "@/lib/format";
+import { edgeCountLabel, isContractCall, sameWalletEvidence } from "@/lib/format";
 import type { Case, RiskLevel } from "@/lib/generated/prisma/client";
 import type { TraceGraph } from "@/lib/tracers/types";
 
@@ -138,12 +138,25 @@ export function CaseReportDocument({ kase, graph }: { kase: Case; graph: TraceGr
                 reliability {graph.recommendation.top.breakdown.responseReliabilityScore}/5)
               </Text>
             </View>
+            {graph.recommendation.top.sameWallet && (
+              <View style={{ marginBottom: 3 }}>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Attribution basis</Text>
+                  <Text style={styles.value}>
+                    Same-wallet inference (common-input ownership), not a confirmed label — the VASP is asked to
+                    confirm ownership before disclosing
+                  </Text>
+                </View>
+                {/* Full width, like the evidence trail: a 64-char txid won't fit the label/value columns. */}
+                <Text style={[styles.subtitle, styles.mono]}>{sameWalletEvidence(graph.recommendation.top)}</Text>
+              </View>
+            )}
             {graph.recommendation.alternatives.map((alt) => (
               <View style={styles.row} key={alt.address}>
                 <Text style={styles.label}>Alternative</Text>
                 <Text style={styles.value}>
                   {alt.vaspName} — score {alt.breakdown.score} ({alt.breakdown.hopDistance} hop
-                  {alt.breakdown.hopDistance === 1 ? "" : "s"})
+                  {alt.breakdown.hopDistance === 1 ? "" : "s"}){alt.sameWallet ? " — same-wallet inference" : ""}
                 </Text>
               </View>
             ))}
