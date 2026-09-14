@@ -3,9 +3,10 @@
 // address's outgoing transfers" differs. Each chain's tracer (ethereum.ts,
 // bitcoin.ts, tron.ts) is a thin adapter around this.
 import { prisma } from "@/lib/prisma";
-import { recommendVasp } from "@/lib/scoring";
+import { issuerLeads, recommendVasp, unregisteredExchanges } from "@/lib/scoring";
 import { applyTypologyFlags } from "@/lib/typology";
 import { applyCoSpendAttribution, applyConfidenceClustering } from "@/lib/clustering";
+import { sumValuesByAsset } from "@/lib/format";
 import type { Chain } from "@/lib/generated/prisma/client";
 import type { NodeKind, TraceAsset, TraceEdge, TraceGraph, TraceNode } from "./types";
 
@@ -34,6 +35,13 @@ export interface ChainAdapter {
   // coSpenders: addresses that signed inputs alongside this one, each with
   // one evidence tx hash. Bitcoin only (UTXO inputs); account chains omit it.
   fetchOutgoing: (address: string) => Promise<{ transfers: RawTransfer[]; coSpenders?: Map<string, string> }>;
+  // Real on-chain balance (native currency only), and — Bitcoin only — a
+  // real total-ever-received figure. Optional: only called for the root and
+  // LABEL_MATCH nodes (see below), one extra paced call each, not per node —
+  // fetching it for every intermediary would double a deep trace's cost the
+  // same way ROADMAP.md already measured and rejected for other per-node
+  // additions.
+  fetchStats?: (address: string) => Promise<{ balanceBaseUnits: string; totalReceivedBaseUnits?: string }>;
 }
 
 export async function traceChain(adapter: ChainAdapter, rootAddress: string, maxDepth: number): Promise<TraceGraph> {
@@ -131,6 +139,29 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
 
     for (const agg of topDestinations) {
       const to = agg.to;
+
+      if (!nodes.has(to) && nodes.size < NODE_BUDGET) {
+        const label = labelByAddress.get(to);
+        const kind: NodeKind = label ? (label.labelType as NodeKind) : "INTERMEDIARY";
+        nodes.set(to, {
+          address: to,
+          depth: depth + 1,
+          kind,
+          entityName: label?.entityName,
+          source: label?.source,
+          confidence: label ? "high" : null,
+          stopReason: label ? "LABEL_MATCH" : null,
+          typologyFlags: [],
+        });
+        queue.push({ address: to, depth: depth + 1 });
+      }
+      // Budget hit before this destination got a node: no edge either. An
+      // edge into a node that doesn't exist made react-force-graph throw
+      // "node not found" (2 of 89 stored cases, both truncated traces) and
+      // counted a transfer the graph can't show. The truncation warning
+      // below already says the trace is incomplete.
+      if (!nodes.has(to)) continue;
+
       edges.push({
         from: address,
         to,
@@ -149,22 +180,6 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
         latestTimestamp: agg.latestTimestamp,
         typologyFlags: [],
       });
-
-      if (!nodes.has(to) && nodes.size < NODE_BUDGET) {
-        const label = labelByAddress.get(to);
-        const kind: NodeKind = label ? (label.labelType as NodeKind) : "INTERMEDIARY";
-        nodes.set(to, {
-          address: to,
-          depth: depth + 1,
-          kind,
-          entityName: label?.entityName,
-          source: label?.source,
-          confidence: label ? "high" : null,
-          stopReason: label ? "LABEL_MATCH" : null,
-          typologyFlags: [],
-        });
-        queue.push({ address: to, depth: depth + 1 });
-      }
     }
   }
 
@@ -172,7 +187,10 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
     warnings.push(`Node budget (${NODE_BUDGET}) reached — trace truncated before completing all branches.`);
   }
 
-  const vaspRegistry = await prisma.vaspRegistry.findMany();
+  const [vaspRegistry, issuerRegistry] = await Promise.all([
+    prisma.vaspRegistry.findMany(),
+    prisma.issuerRegistry.findMany(),
+  ]);
   const nodeList = [...nodes.values()];
   // Co-spend first: a same-wallet attribution is direct evidence, so it
   // should win over the forwards-80%-to-an-exchange inference, which skips
@@ -181,6 +199,49 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
   applyConfidenceClustering(nodeList, edges);
   applyTypologyFlags(nodeList, edges);
 
+  // Received-in-trace: free (already-fetched edges, zero extra API calls) —
+  // every node gets this. Grouped by asset per node, same reasoning as the
+  // edge aggregation above.
+  const edgesByDest = new Map<string, TraceEdge[]>();
+  for (const e of edges) {
+    const list = edgesByDest.get(e.to) ?? [];
+    list.push(e);
+    edgesByDest.set(e.to, list);
+  }
+  for (const node of nodeList) {
+    const incoming = edgesByDest.get(node.address);
+    if (!incoming) continue;
+    // A zero total (a node reached only via zero-value contract calls) isn't
+    // "received" in any sense worth showing — same reasoning as
+    // CONTRACT_CALL edges never rendering a value. Drop zero entries rather
+    // than store/display "0.0000 ETH received", which would read as a real
+    // observation instead of the absence of one.
+    const totals = sumValuesByAsset(incoming.map((e) => ({ asset: e.asset, valueBaseUnits: e.valueWei }))).filter(
+      (t) => BigInt(t.valueBaseUnits) > BigInt(0)
+    );
+    if (totals.length > 0) node.receivedInTrace = totals;
+  }
+
+  // Real balance/total-received: paced live calls, so deliberately scoped to
+  // the root (how much is at stake) and LABEL_MATCH nodes (how much reached
+  // the exchange/mixer/etc that actually matters) — not every intermediary.
+  // Best-effort: a failed stats call just leaves the node's fields unset,
+  // never fails the trace that already succeeded.
+  if (adapter.fetchStats) {
+    const statsTargets = nodeList.filter((n) => n.address === root || n.stopReason === "LABEL_MATCH");
+    await Promise.all(
+      statsTargets.map(async (node) => {
+        try {
+          const stats = await adapter.fetchStats!(node.address);
+          node.balanceBaseUnits = stats.balanceBaseUnits;
+          node.totalReceivedBaseUnits = stats.totalReceivedBaseUnits;
+        } catch {
+          // Supplementary data — silent skip, not a trace-level warning.
+        }
+      })
+    );
+  }
+
   return {
     rootAddress: root,
     chain: adapter.chain,
@@ -188,5 +249,8 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
     nodes: nodeList,
     edges,
     warnings,
-    recommendation: recommendVasp(nodeList, vaspRegistry),  };
+    recommendation: recommendVasp(nodeList, vaspRegistry),
+    unregisteredExchanges: unregisteredExchanges(nodeList, vaspRegistry),
+    issuerLeads: issuerLeads(edges, issuerRegistry),
+  };
 }

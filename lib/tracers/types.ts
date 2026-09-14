@@ -8,7 +8,11 @@ export type NodeKind =
   | "DARKNET"
   | "RANSOMWARE"
   | "BRIDGE"
-  | "UNKNOWN";
+  | "UNKNOWN"
+  // OFAC SDN-listed, from the live sync (lib/sanctions.ts, ROADMAP item 5) —
+  // distinct from RANSOMWARE/DARKNET since a sanctioned address isn't
+  // necessarily either of those categories.
+  | "SANCTIONED";
 
 export type StopReason = "LABEL_MATCH" | "MAX_DEPTH" | "API_ERROR" | null;
 
@@ -34,8 +38,32 @@ export interface TraceNode {
   // address was spent as an input together with `labeledAddress` in `txHash`.
   // Absent on every other node and on cases stored before 2026-09-14.
   coSpend?: { labeledAddress: string; labelType: string; txHash: string };
+  // Transitive common-input ownership: co-spent with `address` (a node that
+  // is itself attributed) in `txHash`. Medium, never routes. Since 2026-09-14.
+  coSpendVia?: { address: string; txHash: string };
   stopReason: StopReason;
   typologyFlags: TypologyFlag[];
+  // Sum of this node's *incoming* edges within this trace, grouped by asset —
+  // not the wallet's real total received, only what this trace's BFS
+  // actually followed into it (capped by FANOUT_CAP/NODE_BUDGET/maxDepth
+  // like everything else in the graph). Absent when nothing pointed at this
+  // node in this trace (true of every root — the tracer only follows
+  // outgoing edges, so a suspect's own incoming is never observed). Absent
+  // on cases stored before 2026-09-15.
+  receivedInTrace?: AssetTotal[];
+  // Real, live on-chain figures — one extra paced API call per node, so only
+  // fetched for the root and any LABEL_MATCH node (see lib/tracers/bfs.ts),
+  // not every intermediary. Both are native-currency only (ETH/BTC/TRX, not
+  // a token balance) and best-effort: a failed stats call leaves both unset
+  // rather than failing the trace. `totalReceivedBaseUnits` is Bitcoin-only —
+  // Blockstream's own indexed history makes it a real complete figure;
+  // Ethereum/Tron only expose *current* balance, not lifetime inflow, so
+  // claiming a "total received" there would overstate what was actually
+  // observed (see lib/etherscan.ts / lib/tronscan.ts's getNativeBalance /
+  // getAccountBalance for the honesty note). Absent on cases stored before
+  // 2026-09-15.
+  balanceBaseUnits?: string;
+  totalReceivedBaseUnits?: string;
 }
 
 // What an edge actually represents. The tracers read *transactions*, and a
@@ -55,6 +83,16 @@ export interface TraceAsset {
   symbol: string;
   decimals: number;
   contract: string;
+}
+
+// One asset's total across a set of edges — absent `asset` = native currency.
+// Used both for "how much did this node receive within this trace" (summed
+// from the trace's own edges, zero extra API calls) and for cross-case
+// aggregation (lib/scoring.ts's aggregateReceivedByVasp). Never mixes assets
+// in one total: 6-decimal USDT and 18-decimal ETH can't be added.
+export interface AssetTotal {
+  asset?: TraceAsset;
+  valueBaseUnits: string;
 }
 
 export interface TraceEdge {
@@ -112,4 +150,20 @@ export interface TraceGraph {
   // Best VASP to route a disclosure request to, ranked above raw hop
   // distance. null when the trace hit no labeled exchange.
   recommendation: { top: VaspRecommendation; alternatives: VaspRecommendation[] } | null;
+  // Exchanges the trace reached (exact label or same-wallet) whose name has
+  // no VaspRegistry entry, so they can't be scored or routed. Surfaced rather
+  // than silently dropped. Absent on cases stored before 2026-09-14.
+  unregisteredExchanges?: { entityName: string; address: string; depth: number }[];
+  // Stablecoin issuers whose asset appeared somewhere in the trace, with
+  // their known freeze process — a fact, not a score. See lib/scoring.ts's
+  // issuerLeads. Absent on cases stored before 2026-09-14.
+  issuerLeads?: IssuerLead[];
+}
+
+export interface IssuerLead {
+  assetSymbol: string;
+  issuerName: string;
+  freezeProcess: string;
+  requiresCourtOrder: boolean;
+  sourceUrl: string;
 }

@@ -1,7 +1,7 @@
 // LIVE: traces real on-chain EVM transfers (native coin + allowlisted ERC-20
 // stablecoins) via Etherscan v2, hop by hop. Ethereum, Polygon and Arbitrum
 // are one adapter — same address format, same API, only the chainid differs.
-import { ERC20_ALLOWLIST, getOutgoingTokenTransfers, getOutgoingTransactions } from "@/lib/etherscan";
+import { ERC20_ALLOWLIST, getNativeBalance, getOutgoingTokenTransfers, getOutgoingTransactions } from "@/lib/etherscan";
 import { traceChain } from "./bfs";
 import type { TraceGraph } from "./types";
 
@@ -67,6 +67,7 @@ function traceEvm(chain: keyof typeof CHAIN_ID, rootAddress: string, maxDepth: n
 
         return { transfers: [...native, ...tokens] };
       },
+      fetchStats: async (address) => ({ balanceBaseUnits: await getNativeBalance(address, chainId) }),
     },
     rootAddress,
     maxDepth
