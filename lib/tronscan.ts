@@ -5,6 +5,7 @@ import type { TraceAsset } from "@/lib/tracers/types";
 
 const TRONSCAN_BASE = "https://apilist.tronscanapi.com/api/transaction";
 const TRC20_TRANSFERS_BASE = "https://apilist.tronscanapi.com/api/filter/trc20/transfers";
+const ACCOUNT_BASE = "https://apilist.tronscanapi.com/api/account";
 const API_PACING_MS = 250;
 
 // contractType 1 = native TRX TransferContract. TRC20/USDT transfers are a
@@ -51,14 +52,33 @@ function headers() {
   return h;
 }
 
+const PAGE_SIZE = 50;
+// ponytail: both Tron endpoints return *mixed-direction* rows, so a busy
+// receiver's own sends can sit past row 50. Page further back only while a
+// full page held no outgoing transfer — an address that sent recently costs
+// one call, as before. Older sends on an address that also sent recently are
+// still invisible; raise MAX_PAGES (one paced call each) if that matters.
+const MAX_PAGES = 3;
+
+async function firstPageWithOutgoing(
+  fetchPage: (start: number) => Promise<{ rowCount: number; outgoing: TronOutgoing[] }>
+): Promise<TronOutgoing[]> {
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { rowCount, outgoing } = await fetchPage(page * PAGE_SIZE);
+    if (outgoing.length > 0 || rowCount < PAGE_SIZE) return outgoing;
+  }
+  return [];
+}
+
 // ponytail: no retry/backoff on 429 — mirrors the Ethereum tracer's
 // tradeoff. Add exponential backoff if hop counts grow past a demo trace.
-export async function getOutgoingTransfers(address: string): Promise<TronOutgoing[]> {
+export function getOutgoingTransfers(address: string): Promise<TronOutgoing[]> {
+  return firstPageWithOutgoing((start) => {
   const url = new URL(TRONSCAN_BASE);
   url.searchParams.set("sort", "-timestamp");
   url.searchParams.set("count", "true");
-  url.searchParams.set("limit", "50");
-  url.searchParams.set("start", "0");
+  url.searchParams.set("limit", String(PAGE_SIZE));
+  url.searchParams.set("start", String(start));
   url.searchParams.set("address", address);
 
   return withPacing("tronscan", API_PACING_MS, async () => {
@@ -67,8 +87,9 @@ export async function getOutgoingTransfers(address: string): Promise<TronOutgoin
       throw new Error(`Tronscan API request failed: ${res.status}`);
     }
     const data = await res.json();
+    const rows = (data.data ?? []) as TronscanTx[];
 
-    return (data.data as TronscanTx[])
+    return { rowCount: rows.length, outgoing: rows
       .filter(
         (tx) =>
           tx.contractType === NATIVE_TRANSFER_CONTRACT_TYPE &&
@@ -82,7 +103,22 @@ export async function getOutgoingTransfers(address: string): Promise<TronOutgoin
         valueBaseUnits: String(tx.amount ?? "0"),
         txHash: tx.hash,
         timestamp: Math.floor(tx.timestamp / 1000), // ms -> unix seconds
-      }));
+      })) };
+  });
+  });
+}
+
+// Current TRX balance only — same limitation as Etherscan's getNativeBalance:
+// Tronscan has no "total ever received" endpoint short of paginating full
+// history, so this is an honest current-balance figure, not a lifetime total.
+export async function getAccountBalance(address: string): Promise<string> {
+  const url = new URL(ACCOUNT_BASE);
+  url.searchParams.set("address", address);
+  return withPacing("tronscan", API_PACING_MS, async () => {
+    const res = await fetch(url.toString(), { headers: headers() });
+    if (!res.ok) throw new Error(`Tronscan account request failed: ${res.status}`);
+    const data = await res.json();
+    return String(data.balance ?? "0"); // sun
   });
 }
 
@@ -90,14 +126,13 @@ export async function getOutgoingTransfers(address: string): Promise<TronOutgoin
 // server-side (`contract_address` — verified 2026-09-13, 50 of 50 rows came
 // back USDT) so spam tokens can't crowd real transfers out of the page.
 // Direction is filtered here: `fromAddress` would do it server-side, but
-// keyless it 301s to an endpoint that answers 401.
-// ponytail: one page of 50 rows in *both* directions, so a busy receiver's
-// outgoing sends can fall off it. Paginate with `start` if that bites.
-export async function getOutgoingUsdtTransfers(address: string): Promise<TronOutgoing[]> {
+// keyless it 301s to an endpoint that answers 401 — hence the paging above.
+export function getOutgoingUsdtTransfers(address: string): Promise<TronOutgoing[]> {
+  return firstPageWithOutgoing((start) => {
   const url = new URL(TRC20_TRANSFERS_BASE);
   url.searchParams.set("sort", "-timestamp");
-  url.searchParams.set("limit", "50");
-  url.searchParams.set("start", "0");
+  url.searchParams.set("limit", String(PAGE_SIZE));
+  url.searchParams.set("start", String(start));
   url.searchParams.set("relatedAddress", address);
   url.searchParams.set("contract_address", TRC20_USDT.contract);
 
@@ -107,8 +142,9 @@ export async function getOutgoingUsdtTransfers(address: string): Promise<TronOut
       throw new Error(`Tronscan TRC20 request failed: ${res.status}`);
     }
     const data = await res.json();
+    const rows = (data.token_transfers ?? []) as Trc20Transfer[];
 
-    return ((data.token_transfers ?? []) as Trc20Transfer[])
+    return { rowCount: rows.length, outgoing: rows
       .filter(
         (t) =>
           t.from_address === address &&
@@ -123,6 +159,7 @@ export async function getOutgoingUsdtTransfers(address: string): Promise<TronOut
         txHash: t.transaction_id,
         timestamp: Math.floor(t.block_ts / 1000),
         asset: TRC20_USDT,
-      }));
+      })) };
+  });
   });
 }

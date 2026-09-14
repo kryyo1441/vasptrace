@@ -3,7 +3,7 @@
 // the report always matches exactly what was shown on screen at trace time.
 import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
-import { edgeCountLabel, isContractCall, sameWalletEvidence } from "@/lib/format";
+import { assetTotalsLabel, edgeCountLabel, formatAssetValue, isContractCall, lowActionabilityNote, sameWalletEvidence } from "@/lib/format";
 import type { Case, RiskLevel } from "@/lib/generated/prisma/client";
 import type { TraceGraph } from "@/lib/tracers/types";
 
@@ -138,6 +138,9 @@ export function CaseReportDocument({ kase, graph }: { kase: Case; graph: TraceGr
                 reliability {graph.recommendation.top.breakdown.responseReliabilityScore}/5)
               </Text>
             </View>
+            {lowActionabilityNote(graph.recommendation.top) && (
+              <Text style={[styles.simulatedNote, { marginBottom: 3 }]}>{lowActionabilityNote(graph.recommendation.top)}</Text>
+            )}
             {graph.recommendation.top.sameWallet && (
               <View style={{ marginBottom: 3 }}>
                 <View style={styles.row}>
@@ -163,6 +166,31 @@ export function CaseReportDocument({ kase, graph }: { kase: Case; graph: TraceGr
           </View>
         )}
 
+        {(graph.issuerLeads ?? []).length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Stablecoin issuer freeze paths</Text>
+            {graph.issuerLeads!.map((l) => (
+              <View key={l.assetSymbol} style={{ marginBottom: 4 }}>
+                <Text style={styles.value}>
+                  {l.assetSymbol} — {l.issuerName} ({l.requiresCourtOrder ? "requires court order" : "no court order documented as required"})
+                </Text>
+                <Text style={styles.subtitle}>{l.freezeProcess}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {(graph.unregisteredExchanges ?? []).length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Exchanges reached, not in the actionability registry</Text>
+            {graph.unregisteredExchanges!.map((x) => (
+              <Text key={x.address} style={[styles.subtitle, styles.mono]}>
+                {x.entityName} — hop {x.depth} — {x.address} (not scored, not routable)
+              </Text>
+            ))}
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Hop-by-hop trace narrative</Text>
           {graph.nodes
@@ -177,6 +205,13 @@ export function CaseReportDocument({ kase, graph }: { kase: Case; graph: TraceGr
                   {n.entityName ? ` — ${n.entityName}` : ""}
                   {n.confidence ? ` — confidence: ${n.confidence}` : ""}
                   {n.stopReason ? ` — stopped: ${n.stopReason.replaceAll("_", " ")}` : ""}
+                  {n.receivedInTrace && n.receivedInTrace.length > 0
+                    ? ` — received in trace: ${assetTotalsLabel(n.receivedInTrace, graph.chain)}`
+                    : ""}
+                  {n.balanceBaseUnits ? ` — current balance (live): ${formatAssetValue(n.balanceBaseUnits, undefined, graph.chain)}` : ""}
+                  {n.totalReceivedBaseUnits
+                    ? ` — total received all-time (live): ${formatAssetValue(n.totalReceivedBaseUnits, undefined, graph.chain)}`
+                    : ""}
                 </Text>
               </View>
             ))}

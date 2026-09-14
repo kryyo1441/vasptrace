@@ -1,13 +1,19 @@
 // Run: npx tsx lib/format.test.ts
 import assert from "node:assert";
 import {
+  assetTotalsLabel,
   buildEmailDraft,
   edgeAmountLabel,
   edgeCountLabel,
   evidenceTrail,
+  formatAssetValue,
+  formatBySymbol,
   hasValueTransfer,
   isContractCall,
+  LEGAL_BASIS,
+  lowActionabilityNote,
   sameWalletEvidence,
+  sumValuesByAsset,
   vaspLine,
 } from "./format";
 import type { TraceEdge, TraceGraph, VaspRecommendation } from "./tracers/types";
@@ -215,6 +221,75 @@ const xfer = (hash: string) => edge({ kind: "TRANSFER", latestTxHash: hash });
   assert.doesNotMatch(exact.body, /inference|confirm ownership/);
   assert.match(exact.body, /received funds traced from it/);
   assert.match(buildEmailDraft({ ...base, address: "0xs", valueMoved: false }).body, /no value transfers/);
+}
+
+// Negative/zero scores still recommend (the arithmetic stays visible) but
+// carry a low-actionability note; a positive score carries none.
+{
+  const rec = (score: number): VaspRecommendation => ({
+    address: "T1",
+    entityName: "Bitfinex",
+    vaspName: "Bitfinex",
+    breakdown: { hopDistance: 3, fiuindRegistered: false, hasIndiaNodalOfficer: false, responseReliabilityScore: 1, score },
+  });
+  assert.match(lowActionabilityNote(rec(-2)), /score -2 ≤ 0/);
+  assert.match(lowActionabilityNote(rec(0)), /Low actionability/);
+  assert.equal(lowActionabilityNote(rec(1)), "");
+}
+
+// The citation names the in-force code (BNSS, since 2024-07-01) and the
+// repealed one it replaced.
+assert.match(LEGAL_BASIS, /Section 94, Bharatiya Nagarik Suraksha Sanhita/);
+assert.match(LEGAL_BASIS, /formerly Section 91, CrPC/);
+
+// sumValuesByAsset groups by asset contract — native and each token get
+// their own total, and repeated items of the same asset accumulate.
+{
+  const usdt = { symbol: "USDT", decimals: 6, contract: "0xusdt" };
+  const totals = sumValuesByAsset([
+    { valueBaseUnits: "1000000000000000000" }, // 1 ETH, native
+    { valueBaseUnits: "500000000000000000" }, // 0.5 ETH, native
+    { asset: usdt, valueBaseUnits: "1000000" }, // 1 USDT
+    { asset: usdt, valueBaseUnits: "2000000" }, // 2 USDT
+  ]);
+  assert.equal(totals.length, 2);
+  const native = totals.find((t) => !t.asset)!;
+  const usdtTotal = totals.find((t) => t.asset?.contract === "0xusdt")!;
+  assert.equal(native.valueBaseUnits, "1500000000000000000");
+  assert.equal(usdtTotal.valueBaseUnits, "3000000");
+}
+
+// An empty list produces an empty totals array, and assetTotalsLabel reads
+// that as "" — no observed inflow is not the same claim as a zero amount.
+{
+  assert.deepEqual(sumValuesByAsset([]), []);
+  assert.equal(assetTotalsLabel([], "ETHEREUM"), "");
+}
+
+// assetTotalsLabel joins multiple assets on one line, each in its own units.
+{
+  const usdt = { symbol: "USDT", decimals: 6, contract: "0xusdt" };
+  const totals = [
+    { valueBaseUnits: "1000000000000000000" },
+    { asset: usdt, valueBaseUnits: "1411608923" },
+  ];
+  assert.equal(assetTotalsLabel(totals, "ETHEREUM"), "1.0000 ETH + 1411.6089 USDT");
+}
+
+// formatAssetValue is the same per-chain-native fallback edgeAmountLabel
+// already relies on, exposed for non-edge callers (a node's balance).
+assert.equal(formatAssetValue("100000000", undefined, "BITCOIN"), "1.0000 BTC");
+
+// formatBySymbol resolves decimals from the symbol alone (cross-case
+// aggregation, where there's no edge/asset object to read decimals off) —
+// native symbols use their real chain decimals, everything else here is a
+// 6-decimal stablecoin.
+{
+  assert.equal(formatBySymbol("1000000000000000000", "ETH"), "1.0000 ETH");
+  assert.equal(formatBySymbol("100000000", "BTC"), "1.0000 BTC");
+  assert.equal(formatBySymbol("1000000", "TRX"), "1.0000 TRX");
+  assert.equal(formatBySymbol("1000000", "USDT"), "1.0000 USDT");
+  assert.equal(formatBySymbol("1000000", "USDT0"), "1.0000 USDT0"); // unknown symbol -> 6dp fallback
 }
 
 console.log("format self-check passed");

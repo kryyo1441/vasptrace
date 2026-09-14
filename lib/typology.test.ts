@@ -97,4 +97,14 @@ const edge = (from: string, to: string, valueWei: string): TraceEdge => ({
   assert.deepEqual(nodes[0].typologyFlags, []);
 }
 
+// Contract calls moved nothing, so they don't count toward fan-out: 4 real
+// transfers + 3 zero-value calls is 4 destinations, not 7.
+{
+  const dests = ["b", "c", "d", "e", "f", "g", "h"];
+  const nodes = [node("a", 0), ...dests.map((d) => node(d, 1))];
+  const edges = dests.map((d, i) => edge("a", d, i < 4 ? "1" : "0"));
+  applyTypologyFlags(nodes, edges);
+  assert.deepEqual(nodes[0].typologyFlags, []);
+}
+
 console.log("typology self-check passed");

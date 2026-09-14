@@ -110,6 +110,31 @@ const edge = (from: string, to: string, valueWei: string): TraceEdge => ({
   assert.match(both.entityName!, /Binance \(cold wallet\) — same wallet/);
 }
 
+// Transitive co-spend: A co-spent with B (seen only in B's window), B with the
+// label. A is attributed via B, marked coSpendVia, and never gets coSpend —
+// so it can't route. A stranger stays unattributed.
+{
+  const labels = new Map([["3binance", { entityName: "Binance (cold wallet)", labelType: "EXCHANGE" }]]);
+  const a = node("3a", { depth: 2 });
+  const b = node("3b");
+  const c = node("3c", { depth: 3 });
+  const stranger = node("3x");
+  const coSpenders = new Map([
+    ["3b", new Map([["3binance", "txB"], ["3a", "txAB"]])],
+    ["3c", new Map([["3a", "txAC"]])],
+  ]);
+  applyCoSpendAttribution([a, b, c, stranger], coSpenders, labels);
+  assert.equal(b.coSpend?.txHash, "txB");
+  assert.equal(a.confidence, "medium");
+  assert.equal(a.coSpend, undefined, "a transitive link must not become routable");
+  assert.deepEqual(a.coSpendVia, { address: "3b", txHash: "txAB" });
+  assert.match(a.entityName!, /same wallet \(transitive\)$/);
+  // Two links out, still one "(transitive)" suffix.
+  assert.deepEqual(c.coSpendVia, { address: "3a", txHash: "txAC" });
+  assert.match(c.entityName!, /same wallet \(transitive\)$/);
+  assert.equal(stranger.confidence, null);
+}
+
 // CoinJoin shape: inputs must not be read as one owner.
 {
   const tx = (inputs: string[], outputs: number[]): EsploraTx => ({

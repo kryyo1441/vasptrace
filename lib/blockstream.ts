@@ -52,42 +52,79 @@ export function isLikelyCoinJoin(tx: EsploraTx): boolean {
   return false;
 }
 
-// ponytail: /address/:addr/txs returns only the ~25 most recent confirmed
-// txs (plus mempool) — no pagination here. Good enough for a demo trace;
-// use /txs/chain/:last_txid to page through full history if needed.
-//
-// ponytail: change-address heuristic is "any vout back to the same input
-// address isn't a new hop". A vout to one of `coSpenders` is almost
-// certainly change too, but still draws as a hop — dropping it would change
-// PEEL_CHAIN output on the 2-output txs that flag relies on, a separate call
-// from attribution. Fresh never-spent change addresses stay undetectable.
+// Esplora pages confirmed history 25 txs at a time (/txs, then
+// /txs/chain/:last_txid).
+const PAGE_SIZE = 25;
+// ponytail: pages further back only while a full page produced no outgoing
+// transfer — the "busy receiver whose send is past the first 25 txs" case
+// (DEMO_ADDRESSES.md's bc1qm34l… sweeper). An address that did send on page 1
+// stops there, so ordinary traces cost exactly what they did. Older sends on
+// an address that also sent recently are still invisible; raise MAX_PAGES
+// (one paced call each) if that matters.
+const MAX_PAGES = 3;
+
+interface EsploraAddressStats {
+  chain_stats: { funded_txo_sum: number; spent_txo_sum: number };
+}
+
+// Real, complete figures — Esplora indexes an address's entire confirmed
+// history, so unlike Etherscan/Tronscan's current-balance-only limitation
+// (see their own getNativeBalance/getAccountBalance), Bitcoin's
+// totalReceivedBaseUnits is an honest lifetime total, not a windowed
+// approximation. Mempool (unconfirmed) txs are excluded, consistent with the
+// rest of this file only reading confirmed transactions.
+export async function getAddressStats(address: string): Promise<{ balanceSats: string; totalReceivedSats: string }> {
+  return withPacing("blockstream", API_PACING_MS, async () => {
+    const res = await fetch(`${BLOCKSTREAM_BASE}/address/${address}`);
+    if (!res.ok) throw new Error(`Blockstream API request failed: ${res.status}`);
+    const stats = (await res.json()) as EsploraAddressStats;
+    const funded = BigInt(stats.chain_stats.funded_txo_sum);
+    const spent = BigInt(stats.chain_stats.spent_txo_sum);
+    return { balanceSats: (funded - spent).toString(), totalReceivedSats: funded.toString() };
+  });
+}
+
+// Change: a vout paying back to *any* input address of a non-CoinJoin tx is
+// the same wallet paying itself (common-input ownership again), not a hop —
+// it used to draw as one, and a 2-output payment+change then read as a
+// PEEL_CHAIN. Fresh never-spent change addresses stay undetectable.
 export async function getOutgoingTransfers(
   address: string
 ): Promise<{ outgoing: BitcoinOutgoing[]; coSpenders: Map<string, string> }> {
-  return withPacing("blockstream", API_PACING_MS, async () => {
-    const res = await fetch(`${BLOCKSTREAM_BASE}/address/${address}/txs`);
-    if (!res.ok) {
-      throw new Error(`Blockstream API request failed: ${res.status}`);
-    }
-    const txs: EsploraTx[] = await res.json();
+  const outgoing: BitcoinOutgoing[] = [];
+  // Addresses that signed inputs alongside this one — same response, no
+  // extra API call. Value is one txid as evidence.
+  const coSpenders = new Map<string, string>();
+  let lastTxid: string | undefined;
 
-    const outgoing: BitcoinOutgoing[] = [];
-    // Addresses that signed inputs alongside this one — same response, no
-    // extra API call. Value is one txid as evidence.
-    const coSpenders = new Map<string, string>();
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const txs = await withPacing("blockstream", API_PACING_MS, async () => {
+      const res = await fetch(`${BLOCKSTREAM_BASE}/address/${address}/txs${lastTxid ? `/chain/${lastTxid}` : ""}`);
+      if (!res.ok) {
+        throw new Error(`Blockstream API request failed: ${res.status}`);
+      }
+      return (await res.json()) as EsploraTx[];
+    });
+
     for (const tx of txs) {
       if (!tx.status.confirmed || !tx.status.block_time) continue;
       const inputs = inputAddresses(tx);
       if (!inputs.has(address)) continue;
-      if (!isLikelyCoinJoin(tx)) {
+      const coinJoin = isLikelyCoinJoin(tx);
+      if (!coinJoin) {
         for (const peer of inputs) if (peer !== address && !coSpenders.has(peer)) coSpenders.set(peer, tx.txid);
       }
       for (const vout of tx.vout) {
         const to = vout.scriptpubkey_address;
-        if (!to || to === address) continue; // no address (OP_RETURN) or change back to self
+        if (!to) continue; // no address (OP_RETURN)
+        if (coinJoin ? to === address : inputs.has(to)) continue; // change
         outgoing.push({ to, valueSats: String(vout.value), txHash: tx.txid, timestamp: tx.status.block_time });
       }
     }
-    return { outgoing, coSpenders };
-  });
+
+    const confirmed = txs.filter((t) => t.status.confirmed);
+    if (outgoing.length > 0 || confirmed.length < PAGE_SIZE) break;
+    lastTxid = confirmed[confirmed.length - 1].txid;
+  }
+  return { outgoing, coSpenders };
 }

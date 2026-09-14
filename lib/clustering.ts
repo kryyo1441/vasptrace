@@ -26,11 +26,13 @@ const LOW_FANIN_MIN_SENDERS = 3;
 // confirmation request that names the inference (lib/scoring.ts,
 // lib/format.ts buildEmailDraft). The node is annotated, never merged — the
 // graph still shows which address transacted.
-// ponytail: direct co-spenders only, from the address's own ~25-tx window.
-// Measured 2026-09-14: that alone attributed 5 of 60 nodes on
-// 3FrmCRcG… to Binance; expanding the labeled addresses into their own
-// clusters first added nothing new. Union-find across the trace if a case
-// ever needs transitive A-with-B-with-label links.
+// Transitive links (A co-spent with B, B co-spent with a label) are followed
+// across the trace's own nodes, both directions, to a fixpoint. They stay
+// medium and are marked `coSpendVia`, but never get `coSpend`, so they never
+// route: the disclosure draft cites *one* tx between the address and the
+// known VASP address, and a transitive link has no such tx.
+// ponytail: only addresses the trace expanded contribute co-spender data;
+// a link through an address outside the trace is invisible.
 export function applyCoSpendAttribution(
   nodes: TraceNode[],
   coSpendersByAddress: Map<string, Map<string, string>>,
@@ -46,6 +48,35 @@ export function applyCoSpendAttribution(
       node.entityName = `${label.entityName} — same wallet`;
       node.confidenceReason = `Spent inputs together with known ${label.entityName} address ${peer} in tx ${txHash} — common-input ownership: one signer controls both`;
       break;
+    }
+  }
+
+  // Symmetric peer list: B's tx can prove the A-B link even if A's window
+  // didn't contain it.
+  const peers = new Map<string, Map<string, string>>();
+  for (const [a, map] of coSpendersByAddress) {
+    for (const [b, tx] of map) {
+      if (!peers.has(a)) peers.set(a, new Map());
+      if (!peers.has(b)) peers.set(b, new Map());
+      peers.get(a)!.set(b, tx);
+      if (!peers.get(b)!.has(a)) peers.get(b)!.set(a, tx);
+    }
+  }
+  const byAddress = new Map(nodes.map((n) => [n.address, n]));
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const node of nodes) {
+      if (node.confidence) continue;
+      for (const [peer, txHash] of peers.get(node.address) ?? []) {
+        const via = byAddress.get(peer);
+        if (!via || (!via.coSpend && !via.coSpendVia)) continue;
+        node.confidence = "medium";
+        node.coSpendVia = { address: peer, txHash };
+        node.entityName = via.entityName!.endsWith("(transitive)") ? via.entityName : `${via.entityName} (transitive)`;
+        node.confidenceReason = `Spent inputs together with ${peer} in tx ${txHash}, which is itself attributed — transitive common-input ownership, not a direct link to a known address, so it can't route a request`;
+        changed = true;
+        break;
+      }
     }
   }
 }

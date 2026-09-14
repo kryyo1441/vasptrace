@@ -1,6 +1,7 @@
 // Rule-based typology flags — SIH plan item 10. Fixed thresholds, not
 // AI/ML pattern recognition; labeled as heuristics throughout the UI.
 import type { TraceEdge, TraceNode, TypologyFlag } from "@/lib/tracers/types";
+import { isContractCall } from "@/lib/format";
 
 export const TYPOLOGY_LABEL: Record<TypologyFlag, string> = {
   FAN_OUT: "Fan-out / smurfing",
@@ -46,9 +47,12 @@ export function applyTypologyFlags(nodes: TraceNode[], edges: TraceEdge[]): void
     const outgoing = outgoingByAddress.get(node.address) ?? [];
 
     // Destinations, not edges: edges are per destination *per asset*, so an
-    // address paid in both TRX and USDT is still one destination. Identical
-    // to the edge count on a native-only trace.
-    const destinations = new Set(outgoing.map((e) => e.to)).size;
+    // address paid in both TRX and USDT is still one destination. Contract
+    // calls don't count — they moved nothing, so they can't be smurfing, and
+    // they were the documented noise source at this very threshold (see the
+    // comment on FAN_OUT_MIN_DESTINATIONS). Stored cases keep the flags they
+    // were saved with; only new traces use this rule.
+    const destinations = new Set(outgoing.filter((e) => !isContractCall(e)).map((e) => e.to)).size;
 
     if (destinations >= FAN_OUT_MIN_DESTINATIONS) {
       addFlag(node, "FAN_OUT");

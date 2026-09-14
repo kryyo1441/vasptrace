@@ -1,7 +1,7 @@
 // Run: npx tsx lib/scoring.test.ts
 import assert from "node:assert";
-import { deriveRiskLevel, recommendVasp } from "./scoring";
-import type { TraceNode } from "./tracers/types";
+import { aggregateReceivedByVasp, deriveRiskLevel, recommendVasp, unregisteredExchanges } from "./scoring";
+import type { TraceEdge, TraceGraph, TraceNode } from "./tracers/types";
 
 const node = (address: string, depth: number, entityName: string): TraceNode => ({
   address,
@@ -79,6 +79,114 @@ assert.equal(
   const twoBinance = recommendVasp([node("0xbinance48", 3, "Binance 48"), node("0xbinance14", 1, "Binance 14")], registry)!;
   assert.equal(twoBinance.top.address, "0xbinance14");
   assert.equal(twoBinance.alternatives.length, 0);
+}
+
+// An exchange with no registry entry isn't scored, but is surfaced — once per
+// exchange, nearest address first — and a registered one is never listed.
+{
+  const bybit = [node("0xbybit2", 3, "Bybit Hot Wallet"), node("0xbybit1", 1, "Bybit 6"), node("0xbinance", 1, "Binance 14")];
+  assert.deepEqual(unregisteredExchanges(bybit, registry), [{ entityName: "Bybit 6", address: "0xbybit1", depth: 1 }]);
+  assert.deepEqual(unregisteredExchanges(nodes, registry), []);
+}
+
+// aggregateReceivedByVasp — "how much money has gone to each VASP", across
+// stored cases, not one trace.
+{
+  const exchangeNode = (address: string, entityName: string): TraceNode => ({
+    address,
+    depth: 1,
+    kind: "EXCHANGE",
+    entityName,
+    confidence: "high",
+    stopReason: "LABEL_MATCH",
+    typologyFlags: [],
+  });
+  const edge = (to: string, valueWei: string, asset?: TraceEdge["asset"]): TraceEdge => ({
+    from: "suspect",
+    to,
+    valueWei,
+    asset,
+    kind: "TRANSFER",
+    txCount: 1,
+    latestTxHash: "0xh",
+    latestTimestamp: 0,
+    typologyFlags: [],
+  });
+  const usdt = { symbol: "USDT", decimals: 6, contract: "0xusdt" };
+
+  const graphA: TraceGraph = {
+    rootAddress: "suspect",
+    chain: "ETHEREUM",
+    maxDepth: 1,
+    nodes: [exchangeNode("0xbin", "Binance 14")],
+    edges: [edge("0xbin", "1000000000000000000"), edge("0xbin", "1000000", usdt)],
+    warnings: [],
+    recommendation: null,
+  };
+  const graphB: TraceGraph = {
+    rootAddress: "suspect2",
+    chain: "ETHEREUM",
+    maxDepth: 1,
+    nodes: [exchangeNode("0xbin2", "Binance 48")],
+    edges: [edge("0xbin2", "500000000000000000")],
+    warnings: [],
+    recommendation: null,
+  };
+
+  const cases = [
+    { chain: "ETHEREUM" as const, traceResult: JSON.stringify(graphA) },
+    { chain: "ETHEREUM" as const, traceResult: JSON.stringify(graphB) },
+  ];
+  const totals = aggregateReceivedByVasp(cases);
+
+  // Two Binance addresses across two cases collapse to one VASP, per asset.
+  const eth = totals.find((t) => t.vaspName === "Binance" && t.symbol === "ETH")!;
+  assert.equal(eth.totalBaseUnits, "1500000000000000000"); // 1 + 0.5 ETH
+  assert.equal(eth.caseCount, 2);
+  const usdtTotal = totals.find((t) => t.vaspName === "Binance" && t.symbol === "USDT")!;
+  assert.equal(usdtTotal.totalBaseUnits, "1000000");
+  assert.equal(usdtTotal.caseCount, 1);
+
+  // A same-wallet (co-spend) match is excluded — not confirmed money to this VASP.
+  const coSpendGraph: TraceGraph = {
+    rootAddress: "s",
+    chain: "BITCOIN",
+    maxDepth: 1,
+    nodes: [
+      {
+        address: "3addr",
+        depth: 1,
+        kind: "EXCHANGE",
+        entityName: "Binance — same wallet",
+        confidence: "medium",
+        coSpend: { labeledAddress: "3known", labelType: "EXCHANGE", txHash: "tx" },
+        stopReason: null,
+        typologyFlags: [],
+      },
+    ],
+    edges: [edge("3addr", "100000000")],
+    warnings: [],
+    recommendation: null,
+  };
+  assert.deepEqual(aggregateReceivedByVasp([{ chain: "BITCOIN", traceResult: JSON.stringify(coSpendGraph) }]), []);
+
+  // Null/malformed traceResult is skipped, not a crash.
+  assert.deepEqual(aggregateReceivedByVasp([{ chain: "ETHEREUM", traceResult: null }]), []);
+  assert.deepEqual(aggregateReceivedByVasp([{ chain: "ETHEREUM", traceResult: "not json" }]), []);
+
+  // A contract-call edge moved no value, so it must not contribute a "0.0000
+  // ETH" total for a VASP that was only ever called, never paid — same
+  // discipline as receivedInTrace's own zero-filter.
+  const callOnlyGraph: TraceGraph = {
+    rootAddress: "suspect3",
+    chain: "ETHEREUM",
+    maxDepth: 1,
+    nodes: [exchangeNode("0xbin3", "Binance 20")],
+    edges: [{ ...edge("0xbin3", "0"), kind: "CONTRACT_CALL" }],
+    warnings: [],
+    recommendation: null,
+  };
+  assert.deepEqual(aggregateReceivedByVasp([{ chain: "ETHEREUM", traceResult: JSON.stringify(callOnlyGraph) }]), []);
 }
 
 // deriveRiskLevel — case-level classification for the dashboard.

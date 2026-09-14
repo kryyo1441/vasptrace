@@ -74,6 +74,33 @@ export async function getOutgoingTokenTransfers(address: string, chainId: number
   );
 }
 
+// Current native balance only — Etherscan's free tier has no "total ever
+// received" endpoint, and summing all incoming txs would need full paginated
+// history (real cost, and still an approximation past the first page). A
+// current balance is an honest, exact, single-call figure; claiming it as
+// "total received" would overstate what was actually observed — the same
+// discipline the CONTRACT_CALL/TRANSFER split already applies elsewhere.
+export async function getNativeBalance(address: string, chainId: number): Promise<string> {
+  const apiKey = process.env.ETHERSCAN_API_KEY;
+  if (!apiKey) throw new Error("ETHERSCAN_API_KEY is not set");
+  const url = new URL(ETHERSCAN_BASE);
+  url.searchParams.set("chainid", String(chainId));
+  url.searchParams.set("module", "account");
+  url.searchParams.set("action", "balance");
+  url.searchParams.set("address", address);
+  url.searchParams.set("apikey", apiKey);
+
+  return withPacing("etherscan", API_PACING_MS, async () => {
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error(`Etherscan API request failed: ${res.status}`);
+    const data = await res.json();
+    if (data.status === "0" && data.message !== "OK") {
+      throw new Error(`Etherscan API error: ${typeof data.result === "string" ? data.result : data.message ?? "unknown error"}`);
+    }
+    return data.result as string; // wei, decimal string
+  });
+}
+
 // ponytail: no retry/backoff on 429 — withPacing already serializes every
 // call (single trace or concurrent traces) so at most one Etherscan request
 // is ever in flight, which is what its free tier actually limits (verified

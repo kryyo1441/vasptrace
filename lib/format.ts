@@ -1,4 +1,4 @@
-import type { TraceEdge, TraceGraph, VaspRecommendation } from "@/lib/tracers/types";
+import type { AssetTotal, TraceAsset, TraceEdge, TraceGraph, VaspRecommendation } from "@/lib/tracers/types";
 import type { Chain, RiskLevel } from "@/lib/generated/prisma/client";
 
 export const CHAIN_LABEL: Record<Chain, string> = {
@@ -12,7 +12,12 @@ export const CHAIN_LABEL: Record<Chain, string> = {
 // Shared with app/api/cases/[id]/sahyog/route.ts's simulated payload — kept
 // in one place so the disclosure email draft (components/sahyog-button.tsx)
 // can't drift from what the "real" routed payload actually cites.
-export const LEGAL_BASIS = "Section 91, Code of Criminal Procedure (India)";
+// The CrPC was repealed on 2024-07-01; Section 94 of the Bharatiya Nagarik
+// Suraksha Sanhita, 2023 is its "summons to produce document or other thing"
+// successor to CrPC s.91 (and adds electronic records). Both are named so a
+// reader on either code can place it. Still needs sign-off from someone with
+// legal training before any real use.
+export const LEGAL_BASIS = "Section 94, Bharatiya Nagarik Suraksha Sanhita, 2023 (formerly Section 91, CrPC)";
 
 // CSS custom properties (light/dark pair defined in app/globals.css) rather
 // than raw hex — the flat brand hues here failed WCAG AA text contrast
@@ -37,6 +42,17 @@ export function vaspLine(rec: VaspRecommendation) {
   }/5 · score ${b.score}${rec.sameWallet ? " · same-wallet inference — confirm ownership" : ""}`;
 }
 
+// recommendVasp has no minimum score: the best exchange reached is still the
+// best one, and hiding it would hide the arithmetic. But a score ≤ 0 (e.g.
+// Bitfinex 3 hops out: 0 + 0 + 1 − 3 = −2) means the formula expects no useful
+// answer, and the page must say that rather than recommend it with a straight
+// face. Shared by the web rec line and the PDF.
+export function lowActionabilityNote(rec: VaspRecommendation) {
+  return rec.breakdown.score <= 0
+    ? `Low actionability: score ${rec.breakdown.score} ≤ 0 — this VASP is unlikely to answer; treat the request as a long shot and look for other leads.`
+    : "";
+}
+
 // The checkable claim behind a same-wallet recommendation, shared by the web
 // pages and the PDF so they cite identical evidence.
 export function sameWalletEvidence(rec: VaspRecommendation) {
@@ -48,13 +64,27 @@ export function sameWalletEvidence(rec: VaspRecommendation) {
 // has one (USDT, USDC), else of the chain's native currency (wei / satoshis /
 // sun) — divisor+symbol keyed off it here rather than renaming the field
 // across every file that touches it.
-const CHAIN_UNIT: Record<Chain, { symbol: string; decimals: number }> = {
+// Exported: reused wherever a value needs formatting outside an edge context
+// — a node's received-in-trace or balance totals (below), a chain's own
+// native unit for a value that has no `asset`.
+export const CHAIN_UNIT: Record<Chain, { symbol: string; decimals: number }> = {
   ETHEREUM: { symbol: "ETH", decimals: 18 },
   POLYGON: { symbol: "POL", decimals: 18 }, // formerly MATIC
   ARBITRUM: { symbol: "ETH", decimals: 18 }, // Arbitrum's native gas coin is ETH
   BITCOIN: { symbol: "BTC", decimals: 8 },
   TRON: { symbol: "TRX", decimals: 6 },
 };
+
+// Decimals for a token symbol, independent of which chain it's on — every
+// stablecoin this app allowlists is pinned to 6 decimals regardless of chain
+// (lib/etherscan.ts's ERC20_ALLOWLIST, lib/tronscan.ts's TRC20_USDT), and a
+// native symbol's decimals are fixed by CHAIN_UNIT above. Used only for
+// cross-case aggregation (lib/scoring.ts's aggregateReceivedByVasp), where
+// grouping is by symbol, not by one edge's own `asset` object.
+const NATIVE_DECIMALS_BY_SYMBOL = new Map(Object.values(CHAIN_UNIT).map((u) => [u.symbol, u.decimals]));
+function decimalsForSymbol(symbol: string): number {
+  return NATIVE_DECIMALS_BY_SYMBOL.get(symbol) ?? 6; // every non-native symbol here is a 6-decimal stablecoin
+}
 
 const DISPLAY_DP = 4;
 
@@ -76,6 +106,44 @@ function formatValue(baseUnits: string, { symbol, decimals }: { symbol: string; 
   const scaled = (value * steps) / perUnit; // value in 1e-4 units, exact
   if (value > BigInt(0) && scaled === BigInt(0)) return `< 0.0001 ${symbol}`;
   return `${(Number(scaled) / Number(steps)).toFixed(DISPLAY_DP)} ${symbol}`;
+}
+
+// Public wrapper over formatValue for callers that have an asset (or lack of
+// one) directly, not an edge — a node's balance/received totals, below.
+export function formatAssetValue(baseUnits: string, asset: TraceAsset | undefined, chain: Chain): string {
+  return formatValue(baseUnits, asset ?? CHAIN_UNIT[chain]);
+}
+
+// Formats by symbol alone, for the one place an edge/asset object isn't
+// available: cross-case aggregation, where the grouping key is already just
+// a symbol string. Not for per-trace display — use formatAssetValue there,
+// which carries the edge's own asset (contract, exact decimals) rather than
+// trusting a symbol-to-decimals guess.
+export function formatBySymbol(baseUnits: string, symbol: string): string {
+  return formatValue(baseUnits, { symbol, decimals: decimalsForSymbol(symbol) });
+}
+
+// Sums a list of same-shaped {asset, valueBaseUnits} items (edges, mostly)
+// by asset — 6-decimal USDT and 18-decimal wei never share a total. Used for
+// "how much did this node receive in this trace" (lib/tracers/bfs.ts) and
+// could sum any other edge list the same way.
+export function sumValuesByAsset(items: { asset?: TraceAsset; valueBaseUnits: string }[]): AssetTotal[] {
+  const byKey = new Map<string, { asset?: TraceAsset; total: bigint }>();
+  for (const item of items) {
+    const key = item.asset?.contract ?? "";
+    const cur = byKey.get(key) ?? { asset: item.asset, total: BigInt(0) };
+    cur.total += BigInt(item.valueBaseUnits || "0");
+    byKey.set(key, cur);
+  }
+  return [...byKey.values()].map((v) => ({ asset: v.asset, valueBaseUnits: v.total.toString() }));
+}
+
+// Joins multiple per-asset totals into one line, e.g. "23.7000 ETH +
+// 3754.9000 USDT". Empty totals list (nothing pointed at this node in this
+// trace) returns "" rather than a misleading "0 <native>" — silence is the
+// honest answer when the trace observed no inflow, not a zero.
+export function assetTotalsLabel(totals: AssetTotal[], chain: Chain): string {
+  return totals.map((t) => formatAssetValue(t.valueBaseUnits, t.asset, chain)).join(" + ");
 }
 
 // Compared against "CONTRACT_CALL" rather than "!== TRANSFER" on purpose:
@@ -167,7 +235,7 @@ export function buildEmailDraft({
   const body = `To: ${vaspName} Compliance / Legal Team
 
 This is a disclosure request in relation to a law-enforcement investigation
-under ${LEGAL_BASIS}.
+under ${LEGAL_BASIS.replace(" (formerly", "\n(formerly")}.
 
 Suspect address: ${address}
 Chain: ${CHAIN_LABEL[chain]}
