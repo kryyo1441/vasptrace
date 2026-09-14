@@ -1,7 +1,16 @@
 // Run: npx tsx lib/format.test.ts
 import assert from "node:assert";
-import { edgeAmountLabel, edgeCountLabel, evidenceTrail, hasValueTransfer, isContractCall } from "./format";
-import type { TraceEdge, TraceGraph } from "./tracers/types";
+import {
+  buildEmailDraft,
+  edgeAmountLabel,
+  edgeCountLabel,
+  evidenceTrail,
+  hasValueTransfer,
+  isContractCall,
+  sameWalletEvidence,
+  vaspLine,
+} from "./format";
+import type { TraceEdge, TraceGraph, VaspRecommendation } from "./tracers/types";
 
 const edge = (overrides: Partial<TraceEdge> = {}): TraceEdge => ({
   from: "0xaaa",
@@ -156,6 +165,56 @@ const xfer = (hash: string) => edge({ kind: "TRANSFER", latestTxHash: hash });
     edgeCountLabel(graph([xfer("0xa"), call("0xb"), call("0xc")])),
     "1 transfer, 2 contract-call links (no value)"
   );
+}
+
+// A same-wallet recommendation names its basis on every line that shows it,
+// and the evidence sentence cites the exact address and tx.
+{
+  const rec: VaspRecommendation = {
+    address: "3root",
+    entityName: "Binance (cold wallet) — same wallet",
+    vaspName: "Binance",
+    breakdown: { hopDistance: 0, fiuindRegistered: true, hasIndiaNodalOfficer: false, responseReliabilityScore: 2, score: 5 },
+    sameWallet: { labeledAddress: "3binance", txHash: "tx1" },
+  };
+  assert.match(vaspLine(rec), /score 5 · same-wallet inference — confirm ownership$/);
+  assert.doesNotMatch(vaspLine({ ...rec, sameWallet: undefined }), /inference/);
+  assert.equal(
+    sameWalletEvidence(rec),
+    "3root (hop 0) was spent as an input together with known Binance address 3binance in tx tx1"
+  );
+  assert.equal(sameWalletEvidence({ ...rec, sameWallet: undefined }), "");
+}
+
+// Disclosure draft wording — the legal output path.
+{
+  const base = { caseId: "c1", vaspName: "Binance", chain: "BITCOIN" as const, evidenceTrail: ["txA"], valueMoved: true };
+  const attribution = { labeledAddress: "3known", txHash: "txK" };
+
+  // Hop 0: the attributed address is the suspect — named once, never twice.
+  const hop0 = buildEmailDraft({ ...base, address: "3suspect", attribution: { ...attribution, address: "3suspect" } });
+  assert.match(hop0.subject, /^Ownership Confirmation and Disclosure Request/);
+  assert.match(hop0.body, /This is an inference\./);
+  assert.match(hop0.body, /Please first confirm whether 3suspect is controlled by\nBinance\./);
+  assert.match(hop0.body, /records associated with it,\nper the evidence trail/);
+  assert.doesNotMatch(hop0.body, /suspect address above/);
+  assert.match(hop0.body, /If it is not, please tell us/);
+  assert.doesNotMatch(hop0.body, /received funds/, "an inference draft must not assert receipt of funds");
+
+  // Hop 2: a different address was attributed, so the suspect is named too.
+  const hop2 = buildEmailDraft({ ...base, address: "3suspect", attribution: { ...attribution, address: "3downstream" } });
+  assert.match(hop2.body, /records associated with it and with the suspect address above,\nper the evidence trail/);
+
+  // Prose wraps like the rest of the draft (short fake addresses, so any
+  // over-long line is the template's, not the data's).
+  for (const line of hop2.body.split("\n")) assert.ok(line.length <= 80, `draft line too long: ${line}`);
+
+  // Exact label: no inference wording at all, both existing branches intact.
+  const exact = buildEmailDraft({ ...base, address: "3suspect" });
+  assert.match(exact.subject, /^Disclosure Request/);
+  assert.doesNotMatch(exact.body, /inference|confirm ownership/);
+  assert.match(exact.body, /received funds traced from it/);
+  assert.match(buildEmailDraft({ ...base, address: "0xs", valueMoved: false }).body, /no value transfers/);
 }
 
 console.log("format self-check passed");

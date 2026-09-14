@@ -9,11 +9,15 @@ const FIUIND_WEIGHT = 3;
 const NODAL_OFFICER_WEIGHT = 2;
 const HOP_PENALTY = 1;
 
-// Only exact-match (high confidence) nodes can be routed to — a clustering
-// guess or pattern-based guess (medium/low, lib/clustering.ts) is useful for
-// investigator attention but isn't solid enough ground for an actual legal
-// disclosure request. Filtered in recommendVasp below, not scored with a
-// multiplier, so a medium/low guess can never outrank an exact match.
+// Two bases can route a disclosure request:
+// - an exact label match (high confidence), and
+// - a same-wallet inference: Bitcoin common-input ownership with a labeled
+//   exchange address (node.coSpend). Routable by user decision 2026-09-14,
+//   on the condition that the payload and draft say it's an inference and
+//   ask the VASP to confirm ownership before disclosing anything
+//   (app/api/cases/[id]/sahyog/route.ts, components/sahyog-button.tsx).
+// Every other medium/low guess (the forwards-80% rule, fan-in hubs) is for
+// investigator attention only and never routes.
 
 // LabeledAddress.entityName is free text like "Binance 14" / "Coinbase 1" /
 // "Binance (cold wallet)"; VaspRegistry keys on the bare name, so match on
@@ -56,10 +60,39 @@ export function recommendVasp(
     });
   }
 
+  for (const node of nodes) {
+    if (node.coSpend?.labelType !== "EXCHANGE" || !node.entityName) continue;
+    const vasp = registryByName.get(registryNameFor(node.entityName));
+    if (!vasp) continue;
+    candidates.push({
+      address: node.address,
+      entityName: node.entityName,
+      vaspName: vasp.name,
+      breakdown: scoreVasp(node.depth, vasp),
+      sameWallet: { labeledAddress: node.coSpend.labeledAddress, txHash: node.coSpend.txHash },
+    });
+  }
+
   if (candidates.length === 0) return null;
 
-  candidates.sort((a, b) => b.breakdown.score - a.breakdown.score);
-  return { top: candidates[0], alternatives: candidates.slice(1) };
+  // Highest score first; at equal score a confirmed label beats an inference,
+  // then the nearer hop wins.
+  candidates.sort(
+    (a, b) =>
+      b.breakdown.score - a.breakdown.score ||
+      Number(!!a.sameWallet) - Number(!!b.sameWallet) ||
+      a.breakdown.hopDistance - b.breakdown.hopDistance
+  );
+  // One entry per VASP: a request goes to an exchange, not an address, and
+  // five addresses in one Binance wallet would otherwise list Binance five
+  // times ("Binance over Binance").
+  const seen = new Set<string>();
+  const ranked = candidates.filter((c) => {
+    if (seen.has(c.vaspName)) return false;
+    seen.add(c.vaspName);
+    return true;
+  });
+  return { top: ranked[0], alternatives: ranked.slice(1) };
 }
 
 // Case-level risk classification (SIH plan item 7's dashboard needs a

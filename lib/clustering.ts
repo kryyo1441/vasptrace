@@ -17,6 +17,39 @@ const MEDIUM_FORWARD_RATIO = 0.8;
 // if any).
 const LOW_FANIN_MIN_SENDERS = 3;
 
+// Also "clustering heuristic match" (medium), Bitcoin only: common-input
+// ownership. Addresses spent as inputs of one tx were signed for by one
+// party, so if any of them is labeled, this address is that entity's wallet.
+// Medium, not high, on purpose: it's an inference (CoinJoins are filtered
+// upstream in lib/blockstream.ts, PayJoin isn't detectable). An exchange
+// match does route a disclosure request, but only as an ownership-
+// confirmation request that names the inference (lib/scoring.ts,
+// lib/format.ts buildEmailDraft). The node is annotated, never merged — the
+// graph still shows which address transacted.
+// ponytail: direct co-spenders only, from the address's own ~25-tx window.
+// Measured 2026-09-14: that alone attributed 5 of 60 nodes on
+// 3FrmCRcG… to Binance; expanding the labeled addresses into their own
+// clusters first added nothing new. Union-find across the trace if a case
+// ever needs transitive A-with-B-with-label links.
+export function applyCoSpendAttribution(
+  nodes: TraceNode[],
+  coSpendersByAddress: Map<string, Map<string, string>>,
+  labelByAddress: Map<string, { entityName: string; labelType: string }>
+): void {
+  for (const node of nodes) {
+    if (node.confidence) continue; // exact match wins
+    for (const [peer, txHash] of coSpendersByAddress.get(node.address) ?? []) {
+      const label = labelByAddress.get(peer);
+      if (!label) continue;
+      node.confidence = "medium";
+      node.coSpend = { labeledAddress: peer, labelType: label.labelType, txHash };
+      node.entityName = `${label.entityName} — same wallet`;
+      node.confidenceReason = `Spent inputs together with known ${label.entityName} address ${peer} in tx ${txHash} — common-input ownership: one signer controls both`;
+      break;
+    }
+  }
+}
+
 function pushTo(map: Map<string, TraceEdge[]>, key: string, edge: TraceEdge) {
   const list = map.get(key);
   if (list) list.push(edge);
