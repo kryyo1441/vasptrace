@@ -8,12 +8,13 @@ import { SahyogButton } from "@/components/sahyog-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
-import { vaspLine, RISK_COLOR } from "@/lib/format";
+import { RISK_COLOR } from "@/lib/format";
 import type { TraceGraph } from "@/lib/tracers/types";
 import { AlertTriangle, ArrowLeft, FileText, Network, Shield, Wallet } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
 import { VaspScoreGauge } from "@/components/vasp-score-gauge";
+import { VaspRecLine } from "@/components/vasp-rec-line";
 
 export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -138,11 +139,9 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
             <div className="flex flex-col items-center gap-4 sm:flex-row">
               <VaspScoreGauge rec={graph.recommendation.top} />
               <div className="flex flex-1 flex-col gap-2 text-sm">
-                <p className="font-medium text-foreground">{vaspLine(graph.recommendation.top)}</p>
+                <VaspRecLine rec={graph.recommendation.top} primary />
                 {graph.recommendation.alternatives.map((alt) => (
-                  <p key={alt.address} className="text-muted-foreground">
-                    {vaspLine(alt)}
-                  </p>
+                  <VaspRecLine key={alt.address} rec={alt} />
                 ))}
               </div>
             </div>
@@ -157,6 +156,12 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
               // than the request does.
               evidenceTrail={evidenceTrail(graph)}
               valueMoved={hasValueTransfer(graph)}
+              attribution={
+                graph.recommendation.top.sameWallet && {
+                  address: graph.recommendation.top.address,
+                  ...graph.recommendation.top.sameWallet,
+                }
+              }
             />
           </CardContent>
         </Card>
