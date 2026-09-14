@@ -30,8 +30,10 @@ export const config = {
     // Everything except: the login page and its own API, the n8n ack
     // endpoints (called server-to-server by n8n itself with no browser
     // session — see docs/PLAN.md's "Final stretch" for why these are
-    // excluded rather than given a shared-secret header), and Next's own
+    // excluded rather than given a shared-secret header), the watch-check
+    // bulk endpoint (same reasoning, but *does* carry its own bearer-token
+    // check — see app/api/watches/check-all/route.ts), and Next's own
     // static/asset paths.
-    "/((?!login|api/auth|api/n8n|_next/static|_next/image|favicon.ico).*)",
+    "/((?!login|api/auth|api/n8n|api/watches/check-all|_next/static|_next/image|favicon.ico).*)",
   ],
 };
