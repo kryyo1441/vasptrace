@@ -170,6 +170,33 @@ const labeledAddresses: {
     entityName,
     source: `PolygonScan public name tag (${tag})`,
   })),
+  // --- Arbitrum exchange wallets (added 2026-09-14). Arbiscan is
+  // Cloudflare-blocked to scripts (ROADMAP item, HANDOFF.md) — unblocked by
+  // reading each page in a real browser session (Claude-in-Chrome) instead of
+  // curl, same public-name-tag provenance as every other explorer-sourced
+  // label here. Bybit ("Bybit: Hot Wallet", 0xf89d7b9c…) was also confirmed
+  // but skipped: not in vaspRegistry, same reason Polygon's seed skipped it. ---
+  {
+    address: "0xf977814e90da44bfa03b6295a0616a897441acec",
+    chain: Chain.ARBITRUM,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Binance 20",
+    source: "Arbiscan public name tag (Binance: Hot Wallet 20)",
+  },
+  {
+    address: "0x631fc1ea2270e98fbd9d92658ece0f5a269aa161",
+    chain: Chain.ARBITRUM,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Binance",
+    source: "Arbiscan public name tag (Binance: Hot Wallet)",
+  },
+  {
+    address: "0xa7efae728d2936e78bda97dc267687568dd593f3",
+    chain: Chain.ARBITRUM,
+    labelType: LabelType.EXCHANGE,
+    entityName: "OKX 3",
+    source: "Arbiscan public name tag (OKX 3)",
+  },
   // --- Tornado Cash mixer contracts. OFAC-sanctioned 2022, delisted by
   // Treasury March 2025 — still labeled MIXER here since the tracer's job
   // is AML pattern detection, not live sanctions-list matching. ---
@@ -224,6 +251,36 @@ const vaspRegistry: {
   { name: "MEXC", fiuindRegistered: false, hasIndiaNodalOfficer: false, responseReliabilityScore: 1 },
 ];
 
+// Issuer freeze paths (ROADMAP item 3, added 2026-09-14). Facts drawn from
+// each issuer's own public statements/policy, not scored — see the model's
+// schema comment for why. Verified 2026-09-14 (see WebSearch citations in
+// PROGRESS.md's entry for this date); re-check before real use, same as the
+// VASP registry's own reliability figures.
+const issuerRegistry: {
+  symbol: string;
+  issuerName: string;
+  freezeProcess: string;
+  requiresCourtOrder: boolean;
+  sourceUrl: string;
+}[] = [
+  {
+    symbol: "USDT",
+    issuerName: "Tether",
+    freezeProcess:
+      "Tether states it works with 340+ law enforcement agencies in 65+ countries and has supported 2,300+ freeze cases, coordinating directly with investigators during active cases (not only via a court order). No publicly documented India-specific process or portal as of this seed — route a request through I4C/Sahyog per this app's usual channel and cite the case; do not assume a guaranteed or fast response outside the US cases Tether has publicised.",
+    requiresCourtOrder: false,
+    sourceUrl: "https://tether.io/news/tether-supports-freeze-of-more-than-344-million-in-usdt-in-coordination-with-ofac-and-u-s-law-enforcement/",
+  },
+  {
+    symbol: "USDC",
+    issuerName: "Circle",
+    freezeProcess:
+      "Circle states it freezes USDC only \"at the direction of law enforcement or the courts\" — i.e. a binding legal order, not an informal request. No publicly documented India-specific process as of this seed.",
+    requiresCourtOrder: true,
+    sourceUrl: "https://www.coindesk.com/business/2026/04/13/circle-ceo-says-he-won-t-freeze-usdc-without-a-court-order-even-as-hackers-walk-away-with-millions",
+  },
+];
+
 async function main() {
   for (const entry of labeledAddresses) {
     await prisma.labeledAddress.upsert({
@@ -238,6 +295,14 @@ async function main() {
       where: { name: vasp.name },
       update: vasp,
       create: vasp,
+    });
+  }
+
+  for (const issuer of issuerRegistry) {
+    await prisma.issuerRegistry.upsert({
+      where: { symbol: issuer.symbol },
+      update: issuer,
+      create: issuer,
     });
   }
 
@@ -268,7 +333,7 @@ async function main() {
   }
 
   console.log(
-    `Seeded ${labeledAddresses.length} labeled addresses, ${vaspRegistry.length} VASP registry entries, and ${demoUsers.length} demo accounts.`
+    `Seeded ${labeledAddresses.length} labeled addresses, ${vaspRegistry.length} VASP registry entries, ${issuerRegistry.length} issuer registry entries, and ${demoUsers.length} demo accounts.`
   );
 }
 
