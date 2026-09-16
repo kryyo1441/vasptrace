@@ -13,10 +13,16 @@ enum Chain {
   ETHEREUM
   TRON
   // EVM chains traced through the same Etherscan v2 key as ETHEREUM (only
-  // the chainid differs). BSC, Base, Optimism and Avalanche are deliberately
-  // absent: Etherscan's free tier refuses them (verified 2026-09-13).
+  // the chainid differs). Base, Optimism and Avalanche are deliberately
+  // absent: Etherscan's free tier refuses them (verified 2026-09-13,
+  // re-verified 2026-09-16).
   POLYGON
   ARBITRUM
+  // BNB Chain. Named in problem statement 26182, and the one chain Etherscan
+  // won't serve for free ("Free API access is not supported for this chain"),
+  // so it goes through Ankr's Advanced API instead — a different provider and
+  // a different request shape, hence its own client and adapter.
+  BSC
 }
 
 enum LabelType {

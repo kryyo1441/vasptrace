@@ -197,6 +197,67 @@ const labeledAddresses: {
     entityName: "OKX 3",
     source: "Arbiscan public name tag (OKX 3)",
   },
+  // --- BNB Chain exchange wallets (added 2026-09-16 with the BSC chain).
+  // Read from BscScan's own public name tag for that address — bscscan.com
+  // is Cloudflare-gated to scripts like Arbiscan was, unblocked the same way
+  // (a real browser session), and the top-accounts-by-balance page surfaces
+  // exchange-tagged addresses directly, no guessing. Four of these addresses
+  // are the exact same 0x… address already seeded on Ethereum/Polygon — real
+  // cross-chain hot-wallet reuse (an EVM address is one keypair across every
+  // EVM chain), confirmed individually on BscScan, not assumed from the
+  // other chain's label. ---
+  {
+    address: "0xbe0eb53f46cd790cd13851d5eff43d12404d33e8",
+    chain: Chain.BSC,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Binance 7",
+    source: "BscScan top-accounts-by-balance page (name tag: Binance 7)",
+  },
+  {
+    address: "0x835678a611b28684005a5e2233695fb6cbbb0007",
+    chain: Chain.BSC,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Binance 70",
+    source: "BscScan top-accounts-by-balance page (name tag: Binance 70)",
+  },
+  {
+    address: "0xf977814e90da44bfa03b6295a0616a897441acec",
+    chain: Chain.BSC,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Binance Hot Wallet 20",
+    source: "BscScan public name tag (Binance: Hot Wallet 20)",
+  },
+  {
+    address: "0x5a52e96bacdabb82fd05763e25335261b270efcb",
+    chain: Chain.BSC,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Binance 28",
+    source: "BscScan public name tag (Binance 28)",
+  },
+  {
+    address: "0x2910543af39aba0cd09dbb2d50200b3e800a63d2",
+    chain: Chain.BSC,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Kraken 1",
+    source: "BscScan public name tag (Kraken 1)",
+  },
+  {
+    address: "0x71660c4005ba85c37ccec55d0c4493e66fe775d3",
+    chain: Chain.BSC,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Coinbase 1",
+    source: "BscScan public name tag (Coinbase 1)",
+  },
+  {
+    address: "0x06959153b974d0d5fdfd87d561db6d8d4fa0bb0b",
+    chain: Chain.BSC,
+    labelType: LabelType.EXCHANGE,
+    // Different tag number from the same address's Polygon label ("OKX 1") —
+    // BscScan tags this one "OKX 33", kept as BscScan wrote it rather than
+    // homogenized to match the other chain's number.
+    entityName: "OKX 33",
+    source: "BscScan public name tag (OKX 33)",
+  },
   // --- Tornado Cash mixer contracts. OFAC-sanctioned 2022, delisted by
   // Treasury March 2025 — still labeled MIXER here since the tracer's job
   // is AML pattern detection, not live sanctions-list matching. ---
@@ -213,6 +274,61 @@ const labeledAddresses: {
     labelType: LabelType.MIXER,
     entityName: "Tornado Cash 100 ETH pool (ex-OFAC SDN, delisted Mar 2025)",
     source: "Treasury/OFAC designation 2022-08-08",
+  },
+  // --- Bridge / cross-chain-swap contracts (added 2026-09-16), from
+  // Etherscan's own "Bridge" label directory (etherscan.io/accounts/label/
+  // bridge — Cloudflare-gated to scripts like Arbiscan/BscScan, unblocked
+  // the same way, a real browser session). LabelType.BRIDGE already existed
+  // in the schema and NodeKind/graph-view.tsx already render it (teal,
+  // "Bridge") — nothing here needed new plumbing, only the missing seed
+  // data. A BRIDGE match stops the trace exactly like MIXER/EXCHANGE does
+  // (lib/tracers/bfs.ts's stopReason check doesn't care which label type),
+  // so this identifies and flags a bridge honestly — it does NOT claim to
+  // follow the funds across to the destination chain. That's the deferred,
+  // harder half (ROADMAP.md item 4: LayerZero/Wormhole/Across message
+  // lookups, verified reachable but not wired in), left alone rather than
+  // rushed to avoid the "silently continues tracing on a second chain"
+  // overclaim ROADMAP.md itself already flagged as the risk here. Also
+  // excluded from scoring.ts's recommendation (kind === "EXCHANGE" only)
+  // and from CRITICAL/HIGH risk escalation (bridge use alone isn't
+  // suspicious the way mixer use is) — both already correct by construction,
+  // not something this addition needed to change. ---
+  {
+    address: "0x0a9f824c05a74f577a536a8a0c673183a872dff4",
+    chain: Chain.ETHEREUM,
+    labelType: LabelType.BRIDGE,
+    entityName: "LayerZero: Swappable Bridge",
+    source: "Etherscan bridge-label directory (71,481 txns)",
+  },
+  {
+    address: "0x0439e60f02a8900a951603950d8d4527f400c3f1",
+    chain: Chain.ETHEREUM,
+    labelType: LabelType.BRIDGE,
+    entityName: "MetaMask: Meta Bridge",
+    source: "Etherscan bridge-label directory (1,841,276 txns)",
+  },
+  {
+    address: "0x05b70fb5477a93be33822bfb31fdaf2c171970df",
+    chain: Chain.ETHEREUM,
+    labelType: LabelType.BRIDGE,
+    // Explicitly a cross-chain swap service, not just a bridge — the other
+    // category problem statement 26182 names alongside bridges.
+    entityName: "Mayan: Swap Bridge (cross-chain swap service)",
+    source: "Etherscan bridge-label directory (598 txns)",
+  },
+  {
+    address: "0x00cd000000003f7f682be4813200893d4e690000",
+    chain: Chain.ETHEREUM,
+    labelType: LabelType.BRIDGE,
+    entityName: "Synapse Protocol: FastBridge RFQ Router V2",
+    source: "Etherscan bridge-label directory (18,946 txns)",
+  },
+  {
+    address: "0x0b9857ae2d4a3dbe74ffe1d7df045bb7f96e4840",
+    chain: Chain.ETHEREUM,
+    labelType: LabelType.BRIDGE,
+    entityName: "Arbitrum: Outbox 4 (official L2 exit bridge)",
+    source: "Etherscan bridge-label directory (111,212 txns)",
   },
   // --- OFAC SDN ransomware-linked address (first-ever crypto SDN listing) ---
   {
