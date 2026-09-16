@@ -58,7 +58,7 @@ Once signed in, paste a wallet address, pick a chain (Ethereum, Polygon,
 Arbitrum, Bitcoin or Tron — all trace live), run a trace.
 
 `TRONSCAN_API_KEY` in `.env.example` is optional — the Tron tracer works
-keyless at demo volume. `ANTHROPIC_API_KEY` and `WATCH_CRON_TOKEN` are also
+keyless at demo volume. `GEMINI_API_KEY` and `WATCH_CRON_TOKEN` are also
 optional — see `.env.example` for what each unlocks; every other route works
 with both unset.
 
