@@ -18,6 +18,7 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-chart-6: var(--chart-6);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -78,6 +79,11 @@
   --chart-3: oklch(0.488 0.243 264.376);
   --chart-4: oklch(0.379 0.146 265.522);
   --chart-5: oklch(0.282 0.091 267.935);
+  /* A 6th chain (BSC) needed a 6th chart color; the existing 5 are one blue
+     ramp by lightness, so this shifts hue to violet instead of extending the
+     ramp darker, which would have crowded chart-4/5 rather than reading as
+     distinct. */
+  --chart-6: oklch(0.55 0.18 300);
   --radius: 0.75rem;
   /* Risk-level functional colors (PLAN.md: keep these meaningful, don't
      absorb into the blue chrome). Re-measured after the Day 4 repaint —
@@ -125,6 +131,7 @@
   --chart-3: oklch(0.623 0.214 259.815);
   --chart-4: oklch(0.546 0.245 262.881);
   --chart-5: oklch(0.488 0.243 264.376);
+  --chart-6: oklch(0.65 0.18 300);
   /* Lighter pair for the dark card background — see the :root comment. */
   --risk-low: #4ade80;
   --risk-medium: #fbbf24;
