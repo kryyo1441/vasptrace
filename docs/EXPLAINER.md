@@ -1602,9 +1602,9 @@ with room to editorialize, and the system prompt states explicitly: never
 invent or override the risk level, the score, or the recommendation, and
 say plainly if there is no recommendation rather than guessing one. The
 model drafts a caption for a decision this app already made by rule; it
-never gets to make the decision itself. Model: `claude-opus-5`.
+never gets to make the decision itself. Model: `gemini-3.6-flash`.
 
-**Optional, and fails safely.** With no `ANTHROPIC_API_KEY` configured, the
+**Optional, and fails safely.** With no `GEMINI_API_KEY` configured, the
 route returns a clear message — "optional, never blocks the rest of the
 app" — instead of a raw error. Every other feature works identically with
 or without it, the same contract `lib/n8n.ts`'s notification already keeps.

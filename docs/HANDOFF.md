@@ -46,29 +46,27 @@ caught by checking the live dashboard, not by review) is `PROGRESS.md`'s
 re-deriving any of it. `EXPLAINER.md` now has full feature write-ups for
 everything both sessions shipped (Features 12-18).
 
-**Currently open, not fixed, found this session:**
+**Session 3's open items — all three resolved 2026-09-16** (details in
+`PROGRESS.md`'s 2026-09-16 entry); only the `pkill` note below still stands:
 
-- **The VASP-response and narrative cards on `/cases/[id]` need a page
-  reload to appear after a Sahyog routing click.** The page is a React
-  Server Component; `SahyogButton`'s client-side `routed` state flip doesn't
-  retroactively reveal content gated server-side on `kase.status`. Not a
-  regression — same pattern the page already had. A proper fix (lift
-  `routed` state up, or call a router refresh) touches `SahyogButton` and
-  wasn't attempted; small enough for a session with room to verify it
-  doesn't disturb the existing routing flow.
-- **The money-tracking `fetchStats` addition was never timing-measured
-  against real concurrent traces**, only reasoned about (scoped to 1-3
-  nodes per trace, so small) — `ROADMAP.md`'s own standing rule says a
-  per-node API addition needs a measured number, not an estimate, and this
-  one didn't get one. Worth an A/B trace-timing pass before trusting it at
-  demo pacing.
-- **The downloaded-PDF path wasn't visually verified this session** for the
-  new money-tracking fields (received-in-trace, balance, total-received in
-  the hop narrative) — the browser tool's download didn't save
-  (`renderToBuffer` also can't run under raw `tsx`, see the existing gotcha
-  below), so this was confirmed only via a 200 response and direct
-  inspection of the stored trace JSON, not the rendered PDF text. Worth a
-  `pdftotext` pass on an actual downloaded file next session.
+- **Sahyog routing needed a page reload — FIXED**, plus two siblings with the
+  same bug. `SahyogButton`, `VaspResponseForm` and `CaseNarrative` all call
+  `router.refresh()` on success, re-rendering the server-gated status badge,
+  response form and chain-of-custody timeline in place. Browser-verified for
+  routing and for a VASP response; the narrative path is verified live
+  against the Gemini API (`GEMINI_API_KEY`). Each refresh also logs a `VIEW_CASE` audit row,
+  kept deliberately — the same row a manual reload wrote. (The narrative
+  card was never status-gated — this note used to say it was.)
+- **`fetchStats` timing — MEASURED, kept as is.** Single traces: ETH depth 3
+  +0.6-0.9s on ~12s; Tron one-hop +1.4-2.7s on 1.3s; BTC `3Frm…` depth 5
+  within noise. Three concurrent ETH traces: wall 14.2s → 17.8s, and the two
+  one-hop traces go ~2.4-4.2s → ~6.7-8.0s, because their stats calls queue
+  on the shared Etherscan pacing queue. No `NOTOK`s, identical graphs. Fine
+  at demo pacing; if concurrent one-hop latency ever matters, fetch stats
+  after the trace responds instead.
+- **PDF money fields — VERIFIED with `pdftotext`** on a real downloaded
+  report: received-in-trace, live balance and all-time total received all
+  render, and sub-0.0001 amounts print as `< 0.0001 BTC`.
 - **This sandbox's `pkill` hangs and gets killed (exit 144) even with a
   pattern that matches nothing** — see the new Gotchas entry below. Every
   earlier `pkill -f "next dev"` instruction in this file and in
@@ -451,10 +449,12 @@ All logged in `PROGRESS.md`, but worth having front-of-mind:
   `kill -9`) directly — both worked fine. Don't assume a hung `pkill` means
   a process is stuck; it may just be `pkill` itself. Check before spending
   time debugging "why won't the dev server die."
-- **The VASP-response/narrative cards need a page reload after Sahyog
-  routing to appear** — see the STATE section above for the mechanism.
-  Not a data bug (the routing itself works), just a client/server state
-  sync gap in `app/cases/[id]/page.tsx`.
+- **Client components that mutate server-gated state must `router.refresh()`**
+  — `/cases/[id]` is a Server Component, so a client-side state flip alone
+  can't reveal content gated on `kase.status` or new custody rows. Its three
+  mutating components all do this since 2026-09-16; any new one needs the
+  same call. The refresh re-runs the page's unconditional `VIEW_CASE`
+  audit write, so expect one after every action row.
 
 Verify UI changes in the browser, and measure rather than eyeball (contrast
 ratios, `scrollWidth` at 375px) — several "bugs" this project turned out to

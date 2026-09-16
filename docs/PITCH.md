@@ -102,7 +102,7 @@ flowchart TB
     end
 
     subgraph Server["Next.js server (single repo, no separate backend)"]
-        API["/api/trace\n/api/cases/[id]/report\n/api/cases/[id]/sahyog"]
+        API["/api/trace (session)\n/api/sahyog/trace (bearer token,\nautomated intake)\n/api/cases/[id]/report\n/api/cases/[id]/sahyog"]
         BFS["Shared BFS tracer engine\n(lib/tracers/bfs.ts)"]
         Score["Scoring + typology + clustering\n(lib/scoring.ts, typology.ts, clustering.ts)"]
         PDF["PDF report renderer\n(@react-pdf/renderer)"]
@@ -110,8 +110,9 @@ flowchart TB
 
     DB[("SQLite via Prisma\nCase / LabeledAddress / VaspRegistry")]
 
-    subgraph Chains["Public block explorer APIs"]
-        ETH["Etherscan"]
+    subgraph Chains["Public block explorer / node APIs"]
+        ETH["Etherscan v2\n(Ethereum, Polygon, Arbitrum)"]
+        ANKR["Ankr Advanced API\n(BNB Chain)"]
         BTC["Blockstream Esplora"]
         TRX["Tronscan"]
     end
@@ -154,16 +155,18 @@ project convention, enforced from day one.
 
 | Piece | Status |
 |---|---|
-| Ethereum / Polygon / Arbitrum / Bitcoin / Tron tracers | **Live** — real public block-explorer APIs, zero synthetic data. Scope (updated 2026-09-13): native transfers **plus allowlisted stablecoins** — USDT/USDC on the EVM chains, USDT on Tron; other tokens not followed. Edges are typed `TRANSFER` vs `CONTRACT_CALL`, so a zero-value contract call is never shown, counted or cited as a payment |
-| Labeled address DB, VASP registry, issuer registry | **Live** — real, individually source-checked public data (16 VASPs, 34 labeled addresses: 31 exchange, 2 mixer, 1 ransomware; 13 of the exchanges are Polygon, 3 Arbitrum; 2 stablecoin issuers). Plus **456 OFAC-sanctioned addresses**, live-synced from the real SDN feed (2026-09-14) |
+| Ethereum / Polygon / Arbitrum / BNB Chain / Bitcoin / Tron tracers | **Live** — real public block-explorer/node APIs, zero synthetic data. BNB Chain (added 2026-09-16) is the one chain Etherscan's free tier refuses, so it goes through a second provider, Ankr, with its own client — live-verified against a real balance that matched BscScan's own figure. Scope (updated 2026-09-13): native transfers **plus allowlisted stablecoins** — USDT/USDC on the EVM chains, USDT on Tron; other tokens not followed (BNB Chain: native only for now). Edges are typed `TRANSFER` vs `CONTRACT_CALL`, so a zero-value contract call is never shown, counted or cited as a payment |
+| Labeled address DB, VASP registry, issuer registry | **Live** — real, individually source-checked public data (16 VASPs, 46 labeled addresses: 38 exchange, 5 DeFi bridge / cross-chain swap service, 2 mixer, 1 ransomware; 13 of the exchanges are Polygon, 3 Arbitrum, 7 BNB Chain; 2 stablecoin issuers). Bridge contracts stop and label a trace like a mixer does — they don't follow funds to the destination chain, which stays roadmap-only (item 4). Plus **456 OFAC-sanctioned addresses**, live-synced from the real SDN feed (2026-09-14) |
 | Legal-actionability scoring | **Live** — real arithmetic over the seeded registry, score breakdown shown on screen, not a black box |
 | Confidence clustering | **Live** — real graph-structural heuristics (forward-ratio, fan-in), not AI/ML |
 | Typology flags | **Live** — real rule-based pattern detection over the traced graph |
 | Auth + role-based access | **Live** — real password hashing (scrypt), real signed sessions, real per-case authorization enforced server-side. The demo *accounts* are seeded; the mechanism is not mocked |
 | PDF report | **Live** — generated from the actual persisted trace |
 | n8n pipeline visualization | **Real workflow**, illustrative re-check — the canvas genuinely executes on real trace data; the "check against labeled DB" node it shows is a visual mirror of a check Next.js already performed, not a second live lookup |
-| Sahyog routing | **Simulated** — no public Sahyog API exists yet; the payload shown is exactly what would be sent, and it never leaves localhost |
-| Cross-chain bridge correlation | **Out of scope**, roadmap only |
+| Sahyog outbound routing (LEA → VASP) | **Simulated** — no public Sahyog API exists yet; the payload shown is exactly what would be sent, and it never leaves localhost |
+| Sahyog inbound intake (`POST /api/sahyog/trace`, added 2026-09-16) | **Live mechanism, simulated caller** — a real, bearer-token-gated trace endpoint a Sahyog integration could call today; it runs the same tracer/scoring as the UI and returns a real recommendation. What's simulated is the caller — there's no live Sahyog Portal sending it real traffic yet |
+| Cross-chain bridge/swap-service **identification** | **Live** (added 2026-09-16) — 5 individually-verified bridge contracts, stop and label a trace exactly like a mixer does |
+| Cross-chain **correlation** (following funds across a bridge) | **Out of scope**, roadmap only (item 4) — the harder half; message-lookup APIs (LayerZero/Wormhole/Across) verified reachable, not wired in |
 
 ---
 
@@ -385,14 +388,19 @@ not just that it works.
 
 ## 11. By the numbers
 
-- **5 chains** traced live: Ethereum, Polygon, Arbitrum, Bitcoin, Tron (3 at
-  submission; Polygon/Arbitrum added 2026-09-13, Arbitrum without labels yet)
-- **16 VASPs** in the legal-actionability registry, **34** individually
-  source-verified labeled addresses (exchanges, mixers, a ransomware
-  address — 18 at submission, plus 13 Polygon and 3 Arbitrum exchange
-  wallets), plus **456 live-synced OFAC-sanctioned addresses**
-- **98 real cases** traced during development and demo rehearsal — not a
-  handful of cherry-picked screenshots
+- **6 chains** traced live: Ethereum, Polygon, Arbitrum, BNB Chain, Bitcoin,
+  Tron (3 at submission; Polygon/Arbitrum added 2026-09-13; BNB Chain added
+  2026-09-16 via a second provider, Ankr, since Etherscan's free tier
+  refuses it)
+- **16 VASPs** in the legal-actionability registry, **46** individually
+  source-verified labeled addresses (38 exchange, 5 DeFi bridge / cross-chain
+  swap service, 2 mixer, 1 ransomware address — 18 at submission, plus 13
+  Polygon, 3 Arbitrum, 7 BNB Chain exchange wallets and 5 bridge contracts
+  added since), plus **456 live-synced OFAC-sanctioned addresses**
+- **104 real cases** traced during development and demo rehearsal — not a
+  handful of cherry-picked screenshots (case counts drift with every
+  rehearsal; quote what `/cases` shows on the day, not this figure — see
+  `DEMO_SCRIPT.md`)
 - **10/10** original plan items shipped with a working first pass by day 1,
   hardened through day 4 — plus auth and RBAC, added after the fact when a
   security review of our own design said it was needed (see §10)

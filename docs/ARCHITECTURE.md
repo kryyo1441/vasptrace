@@ -181,7 +181,7 @@ heuristic/simulation. At a glance:
 | Issuer freeze-path facts | **Live data, no scoring** — Tether/Circle's own public statements, `lib/scoring.ts`'s `issuerLeads`; deliberately unscored, see `ROADMAP.md` item 3 |
 | Address watchlist | **Live** — real API polling on demand or via an external scheduler, no synthetic alerts, `ROADMAP.md` item 6 |
 | Audit log / chain of custody | **Live** — a real hash-chained log of real actions, `lib/audit.ts`; tamper-*evident*, not tamper-*proof* (see its own section below) |
-| LLM-drafted case narrative | **Live when configured, optional** — real Claude API call over the already-computed trace facts; drafts prose only, never the score/risk/recommendation. Degrades to a clear error, never blocks the app, if `ANTHROPIC_API_KEY` is unset |
+| LLM-drafted case narrative | **Live when configured, optional** — real Gemini API call (`gemini-3.6-flash`) over the already-computed trace facts; drafts prose only, never the score/risk/recommendation. Degrades to a clear error, never blocks the app, if `GEMINI_API_KEY` is unset |
 | Money tracking (received-in-trace, wallet balances, cross-case VASP inflow) | **Live** — real chain data throughout; no price feed, so nothing is ever converted to or blended into one dollar figure. See below |
 
 ## Money tracking: three questions, three costs

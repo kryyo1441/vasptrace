@@ -1623,8 +1623,10 @@ calls — and a real root balance of 0.304 ETH); a Bitcoin trace on
 `1CRLGcaXajtWVF5EopZgQUqE12dKn8Rtuh` (confirmed a real non-zero
 `receivedInTrace` on an intermediary, a real root `totalReceivedBaseUnits`
 of 15,010 sats — a small dormant address, matches its `DEMO_ADDRESSES.md`
-description — and a real **15,654.68 BTC** lifetime total on the Binance
-exchange node, a plausible figure for a major exchange hot wallet); and the
+description — and a real **15,654,676 BTC** lifetime total on the Binance
+exchange node — *corrected 2026-09-16: this line originally said 15,654.68,
+a 1000× misread; Blockstream confirms the larger figure, which is recycled
+hot-wallet inflow across 1.19M txs, and the PDF prints it correctly*); and the
 `/cases` dashboard's new card, checked before and after the zero-total fix
 via a direct query against the live DB (`aggregateReceivedByVasp` run
 against all stored cases through a throwaway script, deleted after). PDF
@@ -1649,7 +1651,89 @@ since Etherscan's balance endpoint is native-only and adding per-token
 balance calls would reopen the same per-node-cost question `ROADMAP.md`
 already flags for items 1 and 2.
 
+### 2026-09-16 — Session 3's three open items closed
+
+- **Sahyog routing needed a reload — fixed, along with two siblings that
+  had the same bug.** `/cases/[id]` is a Server Component: the status badge,
+  `VaspResponseForm` and the chain-of-custody timeline all come from the
+  server render, so a client component's local state flip can't update
+  them. All three mutating client components on that page now call
+  `router.refresh()` on success: `sahyog-button.tsx`,
+  `vasp-response-form.tsx` (its `VASP_RESPONSE` custody row was also stale)
+  and `case-narrative.tsx` (same for `DRAFT_NARRATIVE`). `refresh()` keeps
+  client state (Next 16 `useRouter` docs), so the routed payload and any n8n
+  warning stay on screen. HANDOFF claimed the narrative card itself was
+  status-gated; it isn't. `sanctions-sync-button.tsx` and
+  `watches-panel.tsx` were checked and left alone: `/cases` renders no label
+  data, and the watches panel fetches its own list client-side.
+  - **Browser-verified** with a no-reload marker on `window`: routing flipped
+    the badge TRACED → ROUTED and showed the response form and the
+    `ROUTE_SAHYOG` row. On a second test case, clicking "Confirmed" added the
+    `VASP_RESPONSE` row. The marker survived both. The narrative success path
+    is **not** browser-verified: `ANTHROPIC_API_KEY` is unset in dev, so the
+    route returns 503 before the refresh line.
+  - **Deliberate side effect — each refresh writes a `VIEW_CASE` audit row.**
+    `page.tsx` audits every render unconditionally, so an action now logs
+    e.g. `ROUTE_SAHYOG` followed ~70ms later by `VIEW_CASE` (measured on the
+    test case's rows). Kept: it's exactly the row the old manual-reload
+    workaround wrote, and the page really did re-send the case to that user.
+    If the log should record only human-initiated views, dedupe `VIEW_CASE`
+    per user+case over a short window in `page.tsx` — that's an
+    audit-semantics decision, not made here. Also seen, pre-existing: the
+    login redirect (`router.push` + `router.refresh` in `app/login/page.tsx`)
+    writes two `VIEW_CASE` rows ~120ms apart for one arrival.
+  - `tsc --noEmit` and `eslint .` clean project-wide, and `next build` clean
+    (runs alongside `next dev` on Next 16, which builds into `.next/dev`).
+- **`fetchStats` timing — measured A/B.** A throwaway `tsx` script called
+  `traceChain` with the real adapters, with and without `fetchStats`
+  (library calls only, no `Case` rows; deleted after). Interleaved B/A/B/A:
+
+  | Trace | no stats | with stats |
+  |---|---|---|
+  | ETH `0x1b82…` depth 3 (34 nodes) | 12.1s / 11.7s | 12.7s / 12.5s |
+  | Tron `TZ44…` depth 3 (2 nodes) | 1.3s / 1.3s | 4.0s / 2.7s |
+  | BTC `3Frm…` depth 5 (60 nodes) | 22.8s / 17.6s | 19.2s / 17.6s |
+  | 3 concurrent ETH, depth 3 — wall | 14.1s / 14.2s | 17.7s / 17.9s |
+
+  Every run had exactly 2 stats targets and got both balances. Graphs were
+  identical across arms, and there were no `NOTOK`s. The concurrent cost
+  lands on the short traces: `0x82c7…`/`0x6eed…` go ~2.4-4.2s → ~6.7-8.0s,
+  because their stats calls wait behind the long trace's calls on the one
+  per-process Etherscan queue. Kept as is — acceptable at demo pacing. If
+  concurrent one-hop latency ever matters, the upgrade is fetching stats
+  after the trace response, not dropping the feature.
+- **PDF money fields — verified.** A real `GET /api/cases/[id]/report`
+  download (BTC `1CRLGc…`, depth 1) through `pdftotext`: root shows current
+  balance + all-time total received, the intermediary shows received in
+  trace, and the Binance node shows `received in trace: < 0.0001 BTC`,
+  balance 0.0914 BTC and total received 15,654,676.1374 BTC (cross-checked
+  against Blockstream directly; session 3's entry misquoted it and is
+  corrected above).
+
+- **`DEMO_SCRIPT.md` re-measured and rewritten.** One-hop traces now take
+  1.9-3.1s, not ~1s: live balance calls, plus `tokentx` on ETH. The
+  headline trace takes 2.9s through the real route, with n8n down (the
+  Docker daemon wasn't running). `3Frm…` depth 5 takes 20.8s. Results are
+  unchanged: WazirX 8, Binance, Bitfinex, same-wallet Binance. The
+  rewrite adds steps for chain of custody, in-place routing, VASP responses
+  and the money cards; a table of optional beats; `pgrep`+`kill` in place
+  of `pkill`; a "never delete `AuditEvent` rows" reset rule; and a
+  98-case baseline. Found while re-verifying the PDF text: the summary
+  line printed `1 hops` — `lib/pdf/report.tsx` now pluralizes it the way the
+  score row below it already did.
+
+The three test cases this session created (`cmu30pq7x…`, `cmu30zm4f…`,
+`cmu3140oy…`) were deleted after checking `createdAt`/`createdById`; the
+count is back to 98.
+Their audit rows were deliberately **kept** — `AuditEvent.caseId` isn't a foreign key, and
+deleting audit rows would break the hash chain for every later event.
+
 ## Next up
+
+**Updated 2026-09-16:** session 3's open items (Sahyog reload, `fetchStats`
+timing, PDF verification) are closed — see the entry above. Next real
+candidates are unchanged: `ROADMAP.md` item 4 (bridge traversal) or a
+smaller open item.
 
 **Updated 2026-09-14 (session 3):** Money-tracking (received-in-trace, live
 balances/totals, cross-case VASP inflow) is done — see the entry directly
@@ -1737,3 +1821,202 @@ landed, most urgent first:
   demo-technique constraint found on 2026-09-10 — the live-canvas visual
   requires the `/webhook-test/` URLs and a **one-shot** re-arming click
   before *every* trigger; see `DEMO_SCRIPT.md`.
+
+### 2026-09-16 (later) — Case narrative moved from Claude to Gemini
+
+- **Why: cost, not capability.** The Anthropic API is pay-as-you-go with no
+  free tier; a key on a zero-balance account returns
+  `400 credit balance is too low`, which is what the feature actually hit on
+  first live use. Google AI Studio issues a free, rate-limited key, so the
+  optional narrative now runs on Gemini instead of not running at all.
+  The earlier entries (2026-09-14 session 2, and the 2026-09-16 entry above)
+  describe the Claude implementation as it stood then — left as history.
+- **What changed.** `@anthropic-ai/sdk` → `@google/genai` (the only file that
+  imported it was `app/api/cases/[id]/narrative/route.ts`);
+  `ANTHROPIC_API_KEY` → `GEMINI_API_KEY`; UI copy in `case-narrative.tsx`
+  now says "drafted by Gemini". The hard constraint is untouched: same system
+  instruction, same facts-only payload, prose only, never the score, risk
+  level or recommendation.
+- **Model id came from the API, not from docs.** `gemini-2.5-flash` returned
+  `404 … no longer available to new users`, naming `gemini-3.6-flash` as the
+  replacement. Took the live provider error over the cached SDK README.
+- **Thinking tokens count against `maxOutputTokens` — this truncated the
+  first working draft.** A 1024-token budget sized for "3-5 sentences" was
+  spent thinking, and the route persisted a narrative that stopped
+  mid-sentence (`… exhibits "`). Fixed at the root with
+  `thinkingConfig: { thinkingLevel: MINIMAL }` (a caption over
+  already-computed JSON needs no deep reasoning) plus a 4096 budget — and,
+  because this text is persisted and quoted in the PDF, a
+  `finishReason === MAX_TOKENS` guard that throws instead of saving a
+  half sentence into a case file. Guard verified by forcing a truncation
+  with `maxOutputTokens: 40`, not just by reading the code.
+- **`flex: 1` collapsed the new PDF paragraph.** The narrative is now its own
+  "Case summary (AI-drafted)" section in the report, above the VASP
+  recommendation, with an amber note naming the model, the draft time, and
+  the fact that the risk/score/recommendation are rule-based. First render
+  reused `styles.value`, whose `flex: 1` is correct in a `row` but collapses
+  a full-width paragraph's height — the narrative, its caveat and the next
+  section drew on top of each other. Only caught by rendering the PDF to PNG
+  and looking at it; the extracted text alone read as fine.
+- **Verified:** live narrative on case `cmu0uvhc1…`, complete and ending in a
+  full stop; PDF rendered and visually checked both with a narrative and on a
+  case with `narrativeDraft: null` (section correctly absent); `tsc --noEmit`
+  and `eslint` clean; all seven `lib/*.test.ts` self-checks pass.
+- **Watch point — free tier means quotas.** A rehearsed-twenty-times demo can
+  hit a per-minute/per-day cap, which surfaces as a red 502 on the case page.
+  Harmless (the rest of the case page is unaffected), and `DEMO_SCRIPT.md`'s
+  troubleshooting table now has a row for it.
+
+### 2026-09-16 (later still) — Dashboard case list: search + filters, bounded height
+
+- **Plan item 7 (case dashboard) enhanced.** The case table rendered all 89
+  rows inline, so the page just got taller with every trace. It now sits in a
+  `max-h-[26rem]` scroll pane with a sticky header, and has a search box
+  (matches address *or* recommended VASP) plus risk / chain / status filters.
+- **Filtering is client-side over the rows the page already fetched** — no
+  extra query and no round-trip per keystroke. Marked `ponytail:` in
+  `components/cases-table.tsx`: push it into the Prisma query if the caseload
+  ever reaches thousands.
+- **`bg-card` can't be used for a sticky header in this design system.**
+  First version used it and rows scrolled *visibly through* the header —
+  `--card` is deliberately translucent (`/ 70%` light, `/ 6%` dark) because
+  the cards are a glass surface with `backdrop-blur-xl`. `--popover` and
+  `--muted` are translucent too; `--background` is the only opaque surface
+  token, so the header cells use `bg-background`. Sticky + background sit on
+  the `th` cells rather than `thead`, which paints reliably.
+- **`<SelectValue />` renders the raw value, not the item label.** All three
+  filter triggers read "ALL" until each was given a render function
+  (`{(v) => v === ALL ? "All chains" : v}`). Worth knowing: the same is true
+  of the chain select on `/` and in the watches panel, which show the raw
+  enum (`ETHEREUM`) rather than "Ethereum" — left alone, not this change.
+- **Browser-verified in both themes**: searched "Bitfinex" → 14 of 89, which
+  matches the inflow card's "Bitfinex · 14 cases"; risk=HIGH → 8 of 89, which
+  matches the "High / critical risk 8" tile with 0 CRITICAL in the
+  distribution chart; HIGH + "Bitfinex" → the "No cases match these filters."
+  empty state; sticky header checked against scrolling rows in dark and light.
+
+### 2026-09-16 (yet later) — BNB Chain, Sahyog trace-intake API, DeFi bridge identification
+
+Three problem-statement-26182 gaps closed in one session, prompted by an
+explicit line-by-line comparison against the PS text.
+
+**1. BNB Chain (`Chain.BSC`) — verified live, not just wired.**
+
+- Etherscan's free tier refuses chainid 56 outright (`"Free API access is
+  not supported for this chain"` — re-confirmed live, and re-checked three
+  alternatives: legacy `api.bscscan.com` redirects to v2, Routescan answers
+  "chain not supported" for 56, no public Blockscout instance for BSC
+  exists), so this chain needed a second provider: **Ankr's Advanced API**
+  (`lib/ankr.ts`, `lib/tracers/bsc.ts`). JSON-RPC, not REST — a real second
+  client, not a chainid added to `lib/etherscan.ts`.
+- **Two response-shape details weren't in Ankr's docs** (which field, if any,
+  distinguishes a native-coin balance in the `assets` array). Rather than
+  guess one string and silently return `"0"` on a miss — a wrong balance
+  with no error, exactly what this project's whole ethos argues against —
+  `pickNativeAsset` tries three plausible shapes in order (`tokenType ===
+  "NATIVE"`, no `contractAddress`, symbol match) and only gives up after all
+  three miss. Covered by a new self-check, `lib/ankr.test.ts`.
+- **Live-verified once a key was available**: traced the seeded `Binance Hot
+  Wallet 20` BSC address end to end. Returned balance
+  `6735702781977868879800439` wei — **6,735,702.78 BNB, matching BscScan's
+  own live richlist figure for that exact address to the same precision.**
+  Confirms the hex-value decoding, the transaction-fetch shape, and
+  `pickNativeAsset` all landed correctly on the first live call.
+- **7 labeled BSC addresses seeded**, individually verified on BscScan (which
+  is Cloudflare-gated to scripts like Arbiscan was — unblocked the same way,
+  a real browser session): Binance 7, Binance 70, Binance Hot Wallet 20,
+  Binance 28, Kraken 1, Coinbase 1, OKX 33. Four of these are the exact same
+  `0x…` address already seeded on Ethereum/Polygon — real cross-chain
+  hot-wallet reuse (one keypair, many EVM chains), confirmed individually on
+  BscScan rather than assumed from the other chain's label.
+- New chart color needed: the dashboard's 5 chain colors were a single blue
+  lightness-ramp with none spare, so a 6th chain got `--chart-6` as a hue
+  shift (violet) rather than a darker blue that would have crowded
+  `--chart-4`/`--chart-5`.
+- `lib/address.test.ts`'s `EVM` list needed `BSC` added — a real test
+  correctly caught the addition, not a bug this work introduced.
+
+**2. `POST /api/sahyog/trace` — the inbound half of "integrate Sahyog with
+blockchain intelligence APIs."**
+
+PS 26182 asks the system to "automatically analyze suspect cryptocurrency
+wallet addresses reported during investigations on the Sahyog Platform."
+There's no public Sahyog API to integrate against yet (same honesty as the
+existing outbound `app/api/cases/[id]/sahyog` route), so this is the inbound
+half, shaped to be wired to one when it exists.
+
+- Bearer-token gated (`SAHYOG_API_TOKEN`), same pattern as
+  `app/api/watches/check-all`: excluded from `proxy.ts`'s session-cookie
+  matcher, does its own `timingSafeEqual` check, 401 on missing/wrong token
+  verified live.
+- The trace-and-persist logic that used to live inline in
+  `app/api/trace/route.ts` moved to `lib/trace.ts` (`parseTraceInput`,
+  `runTrace`) so the session-gated UI route and this token-gated machine
+  route share one implementation — a validation or scoring change can't
+  drift between the two callers.
+- `createdById: null` on the resulting `Case` — the accurate representation
+  of "no human investigator authored this, one has to pick it up." Verified:
+  a `SUPERVISOR` session sees it (200), the `INVESTIGATOR` demo account does
+  not (404) — same RBAC as every other case. Audit row carries
+  `"source":"sahyog"` in its detail, so the chain-of-custody log can tell an
+  automated intake apart from a human-run trace.
+- **Known interaction, not a bug**: `prisma/seed.ts`'s existing "backfill
+  cases with no owner to the demo investigator" step (originally written for
+  the 81 pre-auth cases) runs on every `db:seed` and will reassign any
+  automated-intake case the same way. Running `db:seed` between rehearsal
+  and a live demo of this feature would silently remove the "no human
+  owner" property being demonstrated — noted in `DEMO_SCRIPT.md`.
+- Live-verified end to end with a real Ethereum trace through this route
+  (WazirX recommendation, score 8) before BSC's key arrived, then again
+  against a bridge-labeled address (below).
+
+**3. DeFi bridge / cross-chain-swap identification — the plumbing already
+existed, only the seed data was missing.**
+
+PS 26182 asks for "identification of ... DeFi bridges ... and cross-chain
+swap services." `LabelType.BRIDGE` was already in the Prisma schema and
+`NodeKind`/`components/graph-view.tsx` already had a color (teal) and a
+legend entry for it — nothing rendered it because nothing was ever seeded as
+one.
+
+- 5 addresses seeded, from Etherscan's own "Bridge" label directory
+  (`etherscan.io/accounts/label/bridge` — also Cloudflare-gated, unblocked
+  the same real-browser way): LayerZero Swappable Bridge, MetaMask Meta
+  Bridge, Mayan Swap Bridge (explicitly a cross-chain *swap service*, the
+  PS's other named category), Synapse Protocol FastBridge, and Arbitrum's
+  official L1↔L2 Outbox.
+- No code changes needed for scoring/risk: `lib/scoring.ts` already only
+  recommends `kind === "EXCHANGE"` (a bridge contract correctly never
+  becomes a VASP disclosure target) and risk-level derivation already never
+  escalated on `BRIDGE` (using a bridge isn't inherently suspicious the way
+  mixer use is) — both already correct by construction.
+- **The honest boundary, stated on purpose**: a `BRIDGE` match stops the
+  trace and identifies it, exactly like `MIXER`/`EXCHANGE` do
+  (`lib/tracers/bfs.ts`'s stop check doesn't care which label type matched).
+  It does **not** claim to follow the funds across to the destination chain
+  — that's the harder half this project already scoped and deferred
+  (`ROADMAP.md` item 4: LayerZero/Wormhole/Across message-lookup APIs,
+  verified reachable in a prior session, not wired in). Seeding bridge
+  labels without also building the cross-chain follow-through would have
+  risked exactly the overclaim ROADMAP.md itself already flagged as the risk
+  here, so that boundary is deliberate, not an oversight.
+- Live-verified: traced a real sender to the seeded LayerZero bridge address
+  on Ethereum, confirmed `kind: "BRIDGE"`, `stopReason: "LABEL_MATCH"`,
+  `recommendation: null` in the JSON, and the teal "Bridge" node rendering
+  correctly on the actual graph in a browser session (not just the API
+  response).
+
+**Verified across all three**: `tsc --noEmit` and `eslint` clean, `next
+build` succeeds (still 20 routes total — BSC and the new endpoint didn't
+break anything static-generation depends on), and all 8 self-checks pass
+(`lib/ankr.test.ts` is new; `lib/address.test.ts`'s EVM-chain list updated to
+include BSC).
+
+**Still not attempted, on purpose**: Solana. It's the other chain PS 26182
+names, but it's non-EVM (a new address format, a new validator regex) with
+no Etherscan-family API — every real provider (Helius, Solscan, QuickNode)
+gates behind its own signup, meaning a second full BNB-Chain-sized arc
+(provider research, a key, a live-shape-mismatch risk) for one more chain.
+Deliberately not started this session rather than rushed to an
+unverified-on-demo-day state, which is exactly the risk BNB Chain just
+walked through carefully.

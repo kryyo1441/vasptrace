@@ -4,7 +4,7 @@ Written 2026-09-12, after the SIH submission. **This is the single engineering
 roadmap.** `PITCH.md` §12 is pitch-facing prose and points here; `HANDOFF.md`
 points here for priority order; `PLAN.md` is the frozen 5-day brief and is not
 a roadmap. Don't fork a second list — this repo already has a scar from a
-duplicated brief going stale (`~/code/CLAUDE.md` exists only because of that).
+duplicated brief going stale (`~/code/CLAUDE.md` exists only because of that).    
 
 **Status as of 2026-09-14 (session 2):** items 0-3, 5 and 6 are shipped.
 Item 4 (bridge traversal) is scoped, with two real APIs confirmed working,
