@@ -31,9 +31,10 @@ export const config = {
     // endpoints (called server-to-server by n8n itself with no browser
     // session — see docs/PLAN.md's "Final stretch" for why these are
     // excluded rather than given a shared-secret header), the watch-check
-    // bulk endpoint (same reasoning, but *does* carry its own bearer-token
-    // check — see app/api/watches/check-all/route.ts), and Next's own
-    // static/asset paths.
-    "/((?!login|api/auth|api/n8n|api/watches/check-all|_next/static|_next/image|favicon.ico).*)",
+    // bulk endpoint and the Sahyog trace-intake endpoint (same reasoning,
+    // but each *does* carry its own bearer-token check — see
+    // app/api/watches/check-all/route.ts and app/api/sahyog/trace/route.ts),
+    // and Next's own static/asset paths.
+    "/((?!login|api/auth|api/n8n|api/watches/check-all|api/sahyog/trace|_next/static|_next/image|favicon.ico).*)",
   ],
 };
