@@ -145,6 +145,7 @@ export default function Home() {
                     <SelectItem value="ETHEREUM">Ethereum</SelectItem>
                     <SelectItem value="POLYGON">Polygon</SelectItem>
                     <SelectItem value="ARBITRUM">Arbitrum</SelectItem>
+                    <SelectItem value="BSC">BNB Chain</SelectItem>
                     <SelectItem value="BITCOIN">Bitcoin</SelectItem>
                     <SelectItem value="TRON">Tron</SelectItem>
                   </SelectContent>
