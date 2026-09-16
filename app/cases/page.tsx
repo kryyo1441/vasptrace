@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { RankedBarChart, Sparkline } from "@/components/dashboard-charts";
+import { CasesTable } from "@/components/cases-table";
 import { SanctionsSyncButton } from "@/components/sanctions-sync-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
@@ -24,6 +24,7 @@ const CHAIN_COLOR: Record<Chain, string> = {
   TRON: "var(--chart-4)",
   POLYGON: "var(--chart-1)",
   ARBITRUM: "var(--chart-5)",
+  BSC: "var(--chart-6)",
 };
 
 function StatTile({
@@ -308,57 +309,17 @@ export default async function CasesPage() {
           {cases.length === 0 ? (
             <p className="text-sm text-muted-foreground">No cases yet — run a trace from the home page.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border text-xs text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Address</th>
-                    <th className="py-2 pr-4 font-medium">Chain</th>
-                    <th className="py-2 pr-4 font-medium">Status</th>
-                    <th className="py-2 pr-4 font-medium">Risk</th>
-                    <th className="py-2 pr-4 font-medium">Recommended VASP</th>
-                    <th className="py-2 pr-4 font-medium">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cases.map((c) => (
-                    <tr key={c.id} className="border-b border-border last:border-0 hover:bg-accent/50">
-                      <td className="py-2 pr-4 font-mono">
-                        <Link href={`/cases/${c.id}`} className="hover:underline">
-                          {c.address}
-                        </Link>
-                      </td>
-                      <td className="py-2 pr-4">{c.chain}</td>
-                      <td className="py-2 pr-4">
-                        <Badge variant="secondary">{c.status}</Badge>
-                      </td>
-                      <td className="py-2 pr-4">
-                        {c.riskLevel ? (
-                          <Badge
-                            variant="outline"
-                            style={{ borderColor: RISK_COLOR[c.riskLevel], color: RISK_COLOR[c.riskLevel] }}
-                          >
-                            {c.riskLevel}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="py-2 pr-4">
-                        {c.recommendedVaspId ? (
-                          (vaspName.get(c.recommendedVaspId) ?? c.recommendedVaspId)
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="py-2 pr-4 text-muted-foreground">
-                        {c.createdAt.toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <CasesTable
+              rows={cases.map((c) => ({
+                id: c.id,
+                address: c.address,
+                chain: c.chain,
+                status: c.status,
+                riskLevel: c.riskLevel,
+                vasp: c.recommendedVaspId ? (vaspName.get(c.recommendedVaspId) ?? c.recommendedVaspId) : null,
+                date: c.createdAt.toLocaleString(),
+              }))}
+            />
           )}
         </CardContent>
       </Card>
