@@ -7,7 +7,7 @@ const ETH = "0x6eedf92fb92dd68a270c3205e96dccc527728066";
 const BTC = "1CRLGcaXajtWVF5EopZgQUqE12dKn8Rtuh";
 const BECH32 = "bc1qshmka805v0s9tcxumupntznxptamen2nnym5y9";
 const TRON = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
-const EVM = ["ETHEREUM", "POLYGON", "ARBITRUM"];
+const EVM = ["ETHEREUM", "POLYGON", "ARBITRUM", "BSC"];
 
 // Each address validates for its own chain.
 assert.ok(ADDRESS_VALIDATORS.ETHEREUM.test(ETH));

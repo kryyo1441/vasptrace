@@ -5,10 +5,15 @@
 import { getOutgoingTokenTransfers, getOutgoingTransactions, ERC20_ALLOWLIST } from "@/lib/etherscan";
 import { getOutgoingTransfers as getBtcOutgoing } from "@/lib/blockstream";
 import { getOutgoingTransfers as getTrxOutgoing, getOutgoingUsdtTransfers } from "@/lib/tronscan";
+import { getBscTransactions, hexToDecimalString } from "@/lib/ankr";
 import { prisma } from "@/lib/prisma";
 import type { Chain, Watch } from "@/lib/generated/prisma/client";
 
 const EVM_CHAIN_ID: Partial<Record<Chain, number>> = { ETHEREUM: 1, POLYGON: 137, ARBITRUM: 42161 };
+// BSC is EVM-shaped (hex, case-insensitive) but goes through Ankr, not
+// Etherscan, so it can't just join EVM_CHAIN_ID above — kept as its own set
+// for the case-folding check below.
+const HEX_ADDRESS_CHAINS: ReadonlySet<Chain> = new Set([...Object.keys(EVM_CHAIN_ID), "BSC"] as Chain[]);
 
 interface Seen {
   to: string;
@@ -41,6 +46,18 @@ async function fetchOutgoing(chain: Chain, address: string): Promise<Seen[]> {
     const { outgoing } = await getBtcOutgoing(address);
     return outgoing.map((o) => ({ to: o.to, valueBaseUnits: o.valueSats, txHash: o.txHash, timestamp: o.timestamp }));
   }
+  if (chain === "BSC") {
+    const from = address.toLowerCase();
+    const txs = await getBscTransactions(address);
+    return txs
+      .filter((t) => t.from?.toLowerCase() === from && t.to)
+      .map((t) => ({
+        to: t.to as string,
+        valueBaseUnits: hexToDecimalString(t.value),
+        txHash: t.hash,
+        timestamp: Number(BigInt(t.timestamp || "0x0")),
+      }));
+  }
   // TRON
   const [native, usdt] = await Promise.all([getTrxOutgoing(address), getOutgoingUsdtTransfers(address)]);
   return [
@@ -50,7 +67,7 @@ async function fetchOutgoing(chain: Chain, address: string): Promise<Seen[]> {
 }
 
 function normalize(chain: Chain, address: string) {
-  return chain in EVM_CHAIN_ID ? address.toLowerCase() : address;
+  return HEX_ADDRESS_CHAINS.has(chain) ? address.toLowerCase() : address;
 }
 
 // Returns the number of new outgoing transfers found since the watch's last

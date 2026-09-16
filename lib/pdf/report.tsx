@@ -93,7 +93,7 @@ export function CaseReportDocument({ kase, graph }: { kase: Case; graph: TraceGr
           <View style={styles.row}>
             <Text style={styles.label}>Trace depth</Text>
             <Text style={styles.value}>
-              {graph.maxDepth} hops · {graph.nodes.length} addresses · {edgeCountLabel(graph)}
+              {graph.maxDepth} hop{graph.maxDepth === 1 ? "" : "s"} · {graph.nodes.length} addresses · {edgeCountLabel(graph)}
             </Text>
           </View>
         </View>
@@ -120,6 +120,20 @@ export function CaseReportDocument({ kase, graph }: { kase: Case; graph: TraceGr
             </Text>
           </View>
         </View>
+
+        {kase.narrativeDraft && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Case summary (AI-drafted)</Text>
+            {/* Unstyled on purpose: `value`'s `flex: 1` collapses a multi-line
+                paragraph's height and overlaps it with the next section. */}
+            <Text>{kase.narrativeDraft}</Text>
+            <Text style={styles.simulatedNote}>
+              Prose drafted by Gemini from this case&apos;s already-computed facts
+              {kase.narrativeDraftedAt ? ` on ${fmtDate(kase.narrativeDraftedAt)}` : ""}, for investigator review. The risk
+              level, score and recommendation in this report are rule-based and were not produced by the model.
+            </Text>
+          </View>
+        )}
 
         {graph.recommendation && (
           <View style={styles.section}>

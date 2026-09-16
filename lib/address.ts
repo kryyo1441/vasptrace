@@ -14,6 +14,7 @@ export const ADDRESS_VALIDATORS: Record<Chain, RegExp> = {
   ETHEREUM: EVM_ADDRESS,
   POLYGON: EVM_ADDRESS,
   ARBITRUM: EVM_ADDRESS,
+  BSC: EVM_ADDRESS,
   // Bitcoin and Tron are base58/bech32 and case-sensitive — they must NOT be
   // case-folded.
   BITCOIN: /^(1[a-km-zA-HJ-NP-Z1-9]{25,34}|3[a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{25,90})$/,

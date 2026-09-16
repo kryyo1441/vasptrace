@@ -5,6 +5,7 @@ export const CHAIN_LABEL: Record<Chain, string> = {
   ETHEREUM: "Ethereum",
   POLYGON: "Polygon",
   ARBITRUM: "Arbitrum",
+  BSC: "BNB Chain",
   BITCOIN: "Bitcoin",
   TRON: "Tron",
 };
@@ -71,6 +72,7 @@ export const CHAIN_UNIT: Record<Chain, { symbol: string; decimals: number }> = {
   ETHEREUM: { symbol: "ETH", decimals: 18 },
   POLYGON: { symbol: "POL", decimals: 18 }, // formerly MATIC
   ARBITRUM: { symbol: "ETH", decimals: 18 }, // Arbitrum's native gas coin is ETH
+  BSC: { symbol: "BNB", decimals: 18 },
   BITCOIN: { symbol: "BTC", decimals: 8 },
   TRON: { symbol: "TRX", decimals: 6 },
 };
