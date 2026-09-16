@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { buildEmailDraft, type Attribution } from "@/lib/format";
@@ -32,6 +33,7 @@ export function SahyogButton({
   const [warning, setWarning] = useState<string | null>(null);
   const [routed, setRouted] = useState(alreadyRouted);
   const [copied, setCopied] = useState(false);
+  const router = useRouter();
 
   async function route() {
     setLoading(true);
@@ -44,6 +46,10 @@ export function SahyogButton({
       setPayload(data.payload);
       setRouted(true);
       if (data.warning) setWarning(data.warning); // non-fatal (e.g. n8n unreachable) — routing still succeeded
+      // The case page gates the status badge, VASP-response form and custody
+      // timeline server-side; refresh re-renders them without losing this
+      // component's payload/warning state.
+      router.refresh();
     } catch (err) {
       setError((err as Error).message);
     } finally {

@@ -8,6 +8,7 @@
 // silently drift it. See app/cases/page.tsx for where observed rates show up
 // instead — next to the seeded score, never overwriting it.
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MessageSquareReply } from "lucide-react";
@@ -29,6 +30,7 @@ export function VaspResponseForm({
 }) {
   const [value, setValue] = useState(current);
   const [saving, setSaving] = useState(false);
+  const router = useRouter();
 
   async function save(v: string) {
     setSaving(true);
@@ -37,7 +39,10 @@ export function VaspResponseForm({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ response: v }),
     });
-    if (res.ok) setValue(v);
+    if (res.ok) {
+      setValue(v);
+      router.refresh(); // shows the new VASP_RESPONSE row in the server-rendered custody timeline
+    }
     setSaving(false);
   }
 

@@ -6,6 +6,7 @@
 // auditable. This component only ever displays and requests prose; nothing
 // it renders can change what the case's own arithmetic says.
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Sparkles } from "lucide-react";
@@ -22,6 +23,7 @@ export function CaseNarrative({
   const [text, setText] = useState(initialText);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   async function draft() {
     setLoading(true);
@@ -31,6 +33,7 @@ export function CaseNarrative({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to draft narrative");
       setText(data.narrative);
+      router.refresh(); // shows the new DRAFT_NARRATIVE row in the server-rendered custody timeline
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -48,7 +51,7 @@ export function CaseNarrative({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p className="text-xs text-muted-foreground">
-          Prose only, drafted by Claude from this case&apos;s already-computed graph — it never sets the risk level,
+          Prose only, drafted by Gemini from this case&apos;s already-computed graph — it never sets the risk level,
           score, or recommendation, and it can be wrong. Review before using it.
         </p>
         <Button onClick={draft} disabled={loading} variant="outline" size="sm" className="w-fit">
