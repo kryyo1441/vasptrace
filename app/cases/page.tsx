@@ -8,7 +8,7 @@ import { CasesTable } from "@/components/cases-table";
 import { SanctionsSyncButton } from "@/components/sanctions-sync-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
-import { Bell, Coins, FolderOpen, Plus, Layers, Send, ShieldAlert, TrendingUp, type LucideIcon } from "lucide-react";
+import { Bell, Coins, FolderOpen, Plus, Layers, Search, Send, ShieldAlert, TrendingUp, type LucideIcon } from "lucide-react";
 import { CHAIN_LABEL, formatBySymbol, RISK_COLOR } from "@/lib/format";
 import { aggregateReceivedByVasp } from "@/lib/scoring";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
@@ -25,6 +25,7 @@ const CHAIN_COLOR: Record<Chain, string> = {
   POLYGON: "var(--chart-1)",
   ARBITRUM: "var(--chart-5)",
   BSC: "var(--chart-6)",
+  SOLANA: "var(--chart-7)",
 };
 
 function StatTile({
@@ -186,8 +187,24 @@ export default async function CasesPage() {
 
       {total === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No cases yet — run a trace from the home page to populate the dashboard.
+          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <FolderOpen className="size-7" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="font-medium">No cases yet</p>
+              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                Every trace you run becomes a case here — with its graph, scoring, PDF report and disclosure
+                routing all in one place.
+              </p>
+            </div>
+            <Link
+              href="/"
+              className="mt-1 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
+            >
+              <Search className="size-4" aria-hidden="true" />
+              Run your first trace
+            </Link>
           </CardContent>
         </Card>
       ) : (
@@ -307,7 +324,10 @@ export default async function CasesPage() {
         </CardHeader>
         <CardContent>
           {cases.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No cases yet — run a trace from the home page.</p>
+            <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
+              <FolderOpen className="size-6 text-muted-foreground/50" aria-hidden="true" />
+              No cases yet — run a trace from the home page.
+            </div>
           ) : (
             <CasesTable
               rows={cases.map((c) => ({
