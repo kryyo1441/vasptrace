@@ -561,8 +561,14 @@ heuristics are actually reproducible from public data.
   `vaspRegistry`. Still open: **BSC / Base / Optimism / Avalanche**, same
   code plus an allowlist entry each but refused by Etherscan's free tier.
   BSC matters most (USDT-BEP20 is a real fraud rail), so that's a paid-plan
-  decision. Non-EVM chains (Solana etc.) each need a new API client and
-  address format.
+  decision. **BSC shipped 2026-09-16** via Ankr's Advanced API, not
+  Etherscan — see `PROGRESS.md`'s entry for that date; this bullet is kept
+  as history for the Base/Optimism/Avalanche gap, which is still open.
+  **Solana shipped 2026-09-18** — a new client (`lib/solana.ts`) over public
+  JSON-RPC, no key needed, 8 seeded exchange wallets; see `PROGRESS.md`'s
+  2026-09-18 entry (item 3) for the real shape differences (signature-based
+  lookup, SPL token-account-to-owner resolution) that made it its own
+  adapter rather than reusing the Etherscan-family pattern.
 
 - **Audit log / chain of custody — SHIPPED 2026-09-14.** Append-only,
   hash-chained `AuditEvent` (`lib/audit.ts`) — each row's hash covers its own

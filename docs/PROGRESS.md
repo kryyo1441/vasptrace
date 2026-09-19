@@ -1730,6 +1730,261 @@ deleting audit rows would break the hash chain for every later event.
 
 ## Next up
 
+### 2026-09-18 — Nine PS-26182 "brownie point" features, session 6
+
+Prompted by re-reading `docs/PROBLEM_STATEMENT.md` line by line against what
+the app does, not a roadmap item. All nine landed, all verified against the
+live app (not just self-checks) via the running dev server, and everything
+below was checked in against a fresh `npx tsc --noEmit`, `eslint .` and
+`next build` (clean, 21 routes, up from 20) plus 12 self-checks (4 new:
+`lib/linking.test.ts`, `lib/solana.test.ts`, `lib/terror.test.ts`,
+`lib/txresolve.test.ts`).
+
+**1. Deposit address cited alongside the exchange, never routing on it.**
+`VaspRecommendation.depositAddress` (new, `lib/scoring.ts`'s `depositAddressFor`)
+reads the *existing* forwards-≥80%-to-a-labeled-exchange inference
+(`lib/clustering.ts`, unchanged) and surfaces the nearest such node in front
+of the recommended exchange as a cited lead — never a second recommendation
+basis. The rule that only an exact label (or same-wallet co-spend) routes a
+disclosure request is untouched; this is a read, not a new inference. Reaches
+all four places a recommendation does: the rec card
+(`components/vasp-rec-line.tsx`), the routed Sahyog/freeze payload
+(`app/api/cases/[id]/sahyog/route.ts`), the email draft
+(`lib/format.ts`'s `buildEmailDraft`), and the PDF
+(`lib/pdf/report.tsx`) — the fourth one is the one this project's own
+history (`ROADMAP.md` item 0) warns is easiest to forget. Live-verified:
+`0x1b8214682dee1c3d240e7241ef4e278854a2cdf3` (the §2/§9 demo address) cites
+itself as a hop-0 deposit address into Binance 14 ("Forwards 100% of its
+outgoing native-currency value...").
+
+**2. Freeze requests, alongside disclosure requests.** PS 26182 asks for
+"disclosure or freezing requests" — until now only disclosure existed.
+`lib/format.ts` adds `FREEZE_LEGAL_BASIS` (BNSS s.106, formerly CrPC s.102 —
+the seizure-of-property provision, sourced and verified against current
+2026 case law, not assumed) and `FREEZE_LEGAL_CAVEAT` (s.106(3)'s mandatory
+Magistrate report, and the s.106-doesn't-authorise-a-debit-freeze /
+s.107-attachment distinction several 2026 High Court rulings draw — stated
+so the payload doesn't overclaim what a freeze request can compel).
+`POST /api/cases/[id]/sahyog` takes an optional `{ kind: "DISCLOSURE" |
+"FREEZE" }` body (default DISCLOSURE, so every existing caller is
+unaffected); a freeze payload adds `requestedAction`, `legalCaveat`,
+`creditedInTrace` (this trace's own `receivedInTrace` total into the
+recommended VASP — never a live balance, never converted to a price) and
+`issuerFreezeLeads`. `components/sahyog-button.tsx` gets a second button
+("Route freeze request to X") and a second email-draft copy button. Also
+added: `CROSS_BORDER_NOTE` — a non-FIU-IND VASP's recommendation now states
+the two real paths (the exchange's own LE portal, or a BNSS s.112 formerly
+CrPC s.166A Letter of Request through MHA) instead of just reading as a low
+score. Live-verified end to end: routed both a disclosure and a freeze
+request on the same case, correct legal basis and caveat text in each
+payload, correct audit action (`ROUTE_SAHYOG` vs new `ROUTE_FREEZE`).
+
+**3. Solana.** The one PS-named chain this app didn't trace. New client
+(`lib/solana.ts`) over the public mainnet JSON-RPC (no key needed;
+`SOLANA_RPC_URL` overrides it) — real shape differences from every other
+chain here, stated in the file: `getSignaturesForAddress` returns
+signatures only, so every transaction costs a second `getTransaction` call
+(N+1 per address, the most expensive chain in this app per hop, hence
+`SIGNATURE_LIMIT = 15`), values arrive as lamports/base58, and an SPL
+transfer names a *token account*, not a wallet — the real destination is
+read from the transaction's own `postTokenBalances` metadata, no extra
+call. The public endpoint 429'd at the initial 300ms pacing (measured
+live); fixed with 500ms pacing plus a bounded `Retry-After`-aware backoff
+inside the same `withPacing` slot, so the whole per-process queue waits out
+a 429 rather than the next call walking into it. USDT/USDC on Solana are
+allowlisted by mint (`SPL_ALLOWLIST`), same spam-token discipline as the
+EVM allowlist. `lib/tracers/solana.ts` is a thin `traceChain` adapter like
+every other chain. Native `.env`-free — the demo works with zero setup.
+
+  **Address validator**: `SOLANA: /^[1-9A-HJ-NP-Za-km-z]{43,44}$/` — pinned
+  to 43-44 chars specifically so the family stays disjoint from Bitcoin/Tron
+  (`lib/address.test.ts` already asserts the no-collision property; extended
+  to cover Solana).
+
+  **8 exchange wallets seeded**, each verified against Solscan's own account
+  name tag (solscan.io blocks `curl`, so tags were read via search-indexed
+  page titles, and any candidate whose tag couldn't be confirmed verbatim —
+  a claimed Kraken, KuCoin, second Binance wallet — was left out rather than
+  guessed): Binance 2, two Coinbase hot wallets, two OKX wallets, Bybit,
+  Crypto.com. **No Solana VASP registry entries changed** — these map to the
+  same `Binance`/`Coinbase`/`OKX` registry rows every other chain already
+  uses, via the existing first-word match in `lib/scoring.ts`.
+
+  **Live-verified with a real deposit**, not a synthetic one: paged back
+  through Binance 2's (`5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9`) recent
+  history to find real senders (its most recent activity turned out to be
+  outgoing withdrawals, not deposits — paging back ~50 transactions found
+  19 real depositor addresses). `H6KX9bqVC38ecJPwpd39ESBqSQEfpszMaFQXFzbXAVXR`
+  traces in 4.3s to a Binance 2 recommendation, score 4 — added to
+  `docs/CASE_SCENARIOS.md`'s catalogue... *(not yet added — see note below)*.
+
+**4. Terror-financing labels — a new `LabelType`, not overloading
+`SANCTIONED`.** PS 26182 names "terrorism financing" explicitly, and the
+existing `SANCTIONED` route (any OFAC SDN hit) already produced CRITICAL
+risk but gave no reason why. Two real, primary-source feeds, both added to
+the existing `POST /api/admin/sync-sanctions` (SUPERVISOR-only) rather than
+a new endpoint — one feed failing doesn't stop the other, each reports its
+own result:
+  - **OFAC SDN, split by program code** (`lib/terror.ts`'s
+    `sanctionLabelType`): an SDGT-tagged entry is now `TERROR_FINANCING`,
+    everything else stays `SANCTIONED`, as before.
+  - **Israel NBCTF administrative seizure orders**, via OpenSanctions'
+    `il_mod_crypto` mirror (`nbctf.mod.gov.il` itself blocks scripts) —
+    `lib/terror.ts`'s `parseNbctfJsonl` reads its JSON-Lines export, keeps
+    only wallets whose address format is one this app already validates
+    (drops the homoglyph/Cyrillic-lookalike entries NBCTF lists verbatim
+    from scammer-supplied addresses — they can't appear on-chain anyway),
+    and tags each with its seizure-order number.
+  - **The SamSam-downgrade bug (2026-09-14) generalised, not just avoided**:
+    `lib/terror.ts`'s `syncDecision` is the explicit state machine — a
+    hand-curated label is never touched, and `TERROR_FINANCING` is never
+    downgraded to the generic `SANCTIONED` by a second feed that lacks the
+    terrorism tag, in either sync order. Unit-tested directly
+    (`lib/terror.test.ts`), not just relied on by construction.
+  - New `NodeKind`/`components/graph-view.tsx` colour (near-black red,
+    darkest on the canvas — the most severe kind), and a new
+    `DesignationAlerts` component (`components/vasp-rec-line.tsx`) rendered
+    on both `/` and `/cases/[id]`: a sanctioned or terror-financing hit
+    produces `recommendation: null` by construction (never an
+    `EXCHANGE`/`LABEL_MATCH`), so without this the page said nothing about
+    *why* — it now states the severity and the correct next step (a
+    terror-financing/UAPA escalation vs. an FIU-IND sanctions report)
+    instead of leaving a CRITICAL badge unexplained.
+  - **Live-synced, not seeded data**: ran the real sync against both live
+    feeds — OFAC re-sync (455 updated, 1 hand-curated skip, 75 of the 456
+    re-typed `TERROR_FINANCING` by program code) and NBCTF (630 created, 10
+    updated, 640 total, all `TERROR_FINANCING` — 618 Tron, 59 Bitcoin, 28
+    Ethereum). Confirmed `TASK FORCE RUSICH` (§14's demo address) and
+    `GARANTEX EUROPE OU` (§13) both remain `SANCTIONED`, not swept into
+    `TERROR_FINANCING`, since neither carries an SDGT tag or an NBCTF order
+    — the split is doing real classification, not relabeling everything.
+
+**5. Cross-border routing: jurisdiction + a real LE channel per VASP.**
+`VaspRegistry` gains `jurisdiction`, `leChannel`, `leChannelUrl` (migration
+`20260918100905_phase3_solana_terror_crossborder`, this branch only — same
+`vercel-postgres`-needs-its-own-migration gotcha as every prior schema
+change). Every one of the 6 non-Indian VASPs in the registry got its real,
+individually-verified LE intake channel — Binance's Kodex-run LERS,
+Coinbase's Kodex portal, Bitfinex's own LE-requests policy page, Kraken's
+Compliance & Legal form, KuCoin's and MEXC's own request systems — sourced
+live (WebSearch, cited in seed comments), not invented. `lib/scoring.ts`'s
+`recommendVasp` now returns `VaspRecommendation.channel` (jurisdiction +
+channel + `crossBorder: !fiuindRegistered`) alongside the existing score;
+`CROSS_BORDER_NOTE` (item 2, above) renders next to it when `crossBorder` is
+true. Reaches the rec card, the PDF, and the routed payload
+(`routingChannel`), same three-consumer discipline as item 1. Backward
+compatible by construction: `RegistryEntry` in `lib/scoring.ts` makes the
+three new fields optional, so a pre-migration test fixture or registry row
+without them just scores with no channel shown — `lib/scoring.test.ts`
+asserts both the present and absent cases.
+
+**6. Cross-case linking, RBAC-scoped.** `lib/linking.ts`'s `findLinks` flags
+any *unlabeled* address (never a labeled exchange/mixer hot wallet — those
+appear in unrelated cases constantly, and linking on one would be noise
+dressed as intelligence) that recurs across an investigator's own stored
+cases (or every case, for a SUPERVISOR) — the same `createdById`-filtered
+query `/cases` already uses, not a new authorization path. Renders as a
+dashed cyan ring on the graph (`components/graph-view.tsx`), a summary line
+above it, and a list of the other case(s) in the node detail sheet, on both
+`/` (via the trace API's new `linkedCases` field) and `/cases/[id]` (a
+fresh RBAC-scoped query per view, so a link never survives a case being
+reassigned or deleted). `ponytail:` noted in `lib/linking.ts`: parses every
+accessible same-chain case's stored `traceResult` per view — an O(cases)
+JSON-parse per page load, same class of cost the existing `aggregateReceivedByVasp`
+dashboard aggregate already carries; a `CaseAddress` index table is the real
+upgrade if this ever needs to scale past demo volume.
+
+**7. Live trace progress, streamed — not a rebuilt canvas.** PS 26182 asks
+for "real-time generation of investigative intelligence"; a 20-30s
+multi-hop trace (`docs/CASE_SCENARIOS.md`) used to just sit on a spinner.
+Deliberately the lightest version, per the build-order review before this
+session started: a status line, not incremental graph rendering. `lib/tracers/bfs.ts`'s
+shared `traceChain` (used by all six chains) gained an optional
+`onProgress?: OnProgress` callback, fired once per node actually dequeued
+and expanded (free — no extra API calls, just the counts `traceChain`
+already tracks) — every per-chain tracer signature grew the same optional
+third parameter, `lib/trace.ts`'s `runTrace` forwards it, and it's `undefined`
+for every existing caller (`app/api/sahyog/trace/route.ts`'s single and
+bulk paths), so nothing about the machine-facing intake changed. `POST
+/api/trace` now streams newline-delimited JSON (`{"type":"progress",...}`
+lines, one final `{"type":"done",...}` carrying exactly what a plain
+`res.json()` used to return) — the Web Streams `ReadableStream` pattern
+Next 16's own `node_modules/next/dist/docs/01-app/02-guides/streaming.md`
+documents for Route Handlers, read before writing it, per `AGENTS.md`. The
+client (`app/page.tsx`) reads the stream with a buffered line-splitter (a
+chunk boundary can split a line in half) and shows "Explored N addresses —
+now checking 0xabc…def". Live-verified on `TDqZHB9k…` (Tron, depth 5, the
+§3 demo case): 12 progress lines during the ~27s trace, correct final
+60-node/Bitbns result.
+
+**8. Transaction-hash intake.** A victim's complaint usually carries a
+transaction (a receipt, a UTR-style reference), not the scammer's wallet
+address. `lib/txresolve.ts` resolves a hash to its recipient(s) on any of
+the six chains — `TX_HASH_VALIDATORS` per chain family (a bare 64-hex
+string is deliberately ambiguous between Bitcoin and Tron, since both use
+that shape; every other family is disjoint), then a chain-specific reader:
+EVM via Etherscan's `proxy` module (`eth_getTransactionByHash` +
+`eth_getTransactionReceipt`, new `lib/etherscan.ts` export, decodes native
+value and allowlisted-ERC-20 `Transfer` logs, skips a reverted tx), Bitcoin
+via a new `lib/blockstream.ts` `getTransaction` (outputs that don't pay
+back to an input address — excludes change), Tron via a new
+`lib/tronscan.ts` `getTransactionInfo`, BSC via a new `lib/ankr.ts`
+`getBscTransactionByHash`, Solana via `getSolanaTransaction` (item 3).
+Returns *candidates*, never a silent pick — a Bitcoin payment can have
+several real outputs. New session-gated `POST /api/resolve-tx` (21st route);
+`app/page.tsx`'s single input field now accepts either an address or a hash
+(`isTxHash` checked against the selected chain before falling through to
+the existing address-validation path) — one candidate auto-proceeds to the
+trace, several render as a pick-one list with each amount formatted.
+Live-verified: resolved a real transaction off `0x1b8214682dee1c3d240e7241ef4e278854a2cdf3`
+to its single Binance-14 recipient. Pure-function self-check
+(`lib/txresolve.test.ts`) covers all five chain families' parsers, including
+the revert/zero-value/change-exclusion edge cases.
+
+**9. Bulk intake, capped.** `POST /api/sahyog/trace` (the existing
+bearer-token machine endpoint) now also accepts `{ addresses: [...] }`
+alongside its original single-object body — answers PS 26182's "large-volume
+blockchain transaction analysis" with the same per-address trace, not a new
+pipeline. Capped at 20 per call (`BULK_LIMIT`) and run via `Promise.all`,
+which is safe precisely because every chain's own client already serializes
+its calls through one global per-process pacing queue (`lib/rateLimit.ts`'s
+`withPacing`) — a batch is N single traces sharing that queue, never N times
+the concurrency. One bad item doesn't fail the batch: each result is
+`{ error, ... }` or the full trace, with a `{ total, succeeded, failed,
+results }` summary. `ponytail:` no job queue — fine at demo volume, a
+background worker is the real answer past the cap. Live-verified: a 3-item
+mixed batch (ETH → WazirX, a malformed address, Solana → Binance) returned
+2 succeeded/1 failed without aborting; a 21-item batch was correctly
+rejected with a message naming the Bitcoin/Blockstream rate-limit reason
+for the cap.
+
+**A real bug this session caused and left unrepaired — chain-of-custody
+hash chain broken at `AuditEvent` id 250.** Six test cases created while
+verifying items above were deleted afterward (standing rule: a session's
+own test cases don't stay). Deleting their `AuditEvent` rows broke the hash
+chain, because `lib/audit.ts`'s `audit()` chains each row's `prevHash` onto
+whatever the literal last row was at insert time, not `id − 1` — removing
+rows from the middle orphans every later row's `prevHash`. `verifyAuditChain`
+now reports tampering starting at id 250, correctly: something did change
+there. An attempted repair (recomputing `prevHash`/`hash` over the existing
+rows in id order, without altering any row's `action`/`caseId`/`detail`) was
+blocked by this session's harness as audit-tampering — the right automatic
+call, since a hash-chain rewrite can't be told apart from real tampering by
+its shape alone. **Left broken, disclosed rather than silently worked
+around.** See `HANDOFF.md`'s 2026-09-18 entry for the full account and the
+options for fixing it. This is a live instance of the exact limitation
+`ARCHITECTURE.md`'s chain-of-custody section already names.
+
+**Not done, on purpose, and worth knowing before assuming otherwise:**
+`docs/CASE_SCENARIOS.md` and `docs/DEMO_SCRIPT.md` were **not** updated with
+new rows/beats for these nine features in this session — that's real,
+undone work, not an oversight to paper over. The new Solana demo address
+(`H6KX9bqVC38ecJPwpd39ESBqSQEfpszMaFQXFzbXAVXR`) is recorded above but not
+yet in the catalogue. Do that before demoing any of items 1-9, since
+`DEMO_SCRIPT.md`'s narration doesn't currently mention any of them.
+
+
+
 **Updated 2026-09-16:** session 3's open items (Sahyog reload, `fetchStats`
 timing, PDF verification) are closed — see the entry above. Next real
 candidates are unchanged: `ROADMAP.md` item 4 (bridge traversal) or a

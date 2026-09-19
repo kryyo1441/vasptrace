@@ -79,7 +79,14 @@ rewrite the entire chain from scratch, consistent hashes and all — the guard
 is against a row being altered *without* also being caught, not against
 someone with database access at all. Anchoring the head hash somewhere
 external (a second store, a periodic external write) is the real upgrade,
-not built here. Every action with legal or investigative weight is logged:
+not built here.
+
+**Currently broken, live, since 2026-09-18** — not a hypothetical: deleting
+a session's own test-case rows also deleted their `AuditEvent` rows, which
+orphaned every later row's `prevHash` (chained onto the literal last row at
+insert time, not `id − 1`). `verifyAuditChain` reports the break starting
+at id 250. Left unrepaired on purpose — see `HANDOFF.md`'s 2026-09-18 entry
+for why and what fixing it would take. Every action with legal or investigative weight is logged:
 login (success and failure), trace, view/download/route/respond/draft-
 narrative on a case, watch add/check, and sanctions sync. `/cases/[id]`
 renders the case's own timeline plus the whole-log verification result.
