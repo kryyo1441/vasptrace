@@ -13,7 +13,13 @@ import { edgeCountLabel } from "@/lib/format";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
 import type { TraceGraph } from "@/lib/tracers/types";
 
-const MODEL = "gemini-3.6-flash";
+// Tried in order. The free tier returns 503 UNAVAILABLE ("high demand") in
+// spikes, and 429 when one model's quota is spent — both are per model, so the
+// next one usually answers. Every entry verified 2026-09-18 to accept the exact
+// config below (gemini-3.7-flash rejects ThinkingLevel.MINIMAL; 2.5-flash is
+// closed to new keys). Any other error (bad request, auth) fails immediately.
+const MODELS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
+const isTransient = (err: unknown) => /"code":\s*(503|429)|UNAVAILABLE|RESOURCE_EXHAUSTED/.test(String((err as Error)?.message));
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -58,10 +64,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       : null,
   };
 
-  try {
-    const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const response = await client.models.generateContent({
-      model: MODEL,
+  const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const draft = (model: string) =>
+    client.models.generateContent({
+      model,
       contents: JSON.stringify(facts),
       config: {
         // Thinking tokens count against maxOutputTokens, so a budget sized for
@@ -72,16 +78,31 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           "You draft a short investigative case narrative (3-5 sentences, plain prose, no headings or bullet points) for an Indian law-enforcement blockchain-tracing tool, from a JSON summary of an already-completed trace. State only what the JSON says — never invent a risk level, score, or VASP recommendation, and never suggest a different one than the JSON already gives. If the JSON shows no recommendation, say so plainly rather than guessing one. Write for an investigator who will review and edit this before it goes in a case file.",
       },
     });
-    const narrative = response.text?.trim();
+
+  try {
+    let response: Awaited<ReturnType<typeof draft>> | undefined;
+    let usedModel = MODELS[0];
+    for (const [i, model] of MODELS.entries()) {
+      try {
+        response = await draft(model);
+        usedModel = model;
+        break;
+      } catch (err) {
+        if (!isTransient(err) || i === MODELS.length - 1) throw err;
+      }
+    }
+    const narrative = response!.text?.trim();
     if (!narrative) throw new Error("Model returned no text");
     // A narrative is persisted and quoted in the PDF report, so a response cut
     // off mid-sentence must fail loudly rather than land in a case file.
-    if (response.candidates?.[0]?.finishReason === FinishReason.MAX_TOKENS) {
+    if (response!.candidates?.[0]?.finishReason === FinishReason.MAX_TOKENS) {
       throw new Error("Model hit the output limit and returned a truncated narrative");
     }
 
     await prisma.case.update({ where: { id }, data: { narrativeDraft: narrative, narrativeDraftedAt: new Date() } });
-    await audit(user.id, "DRAFT_NARRATIVE", kase.id, {});
+    // Which model wrote it goes in the custody log — a fallback draft shouldn't
+    // be indistinguishable from a primary-model one.
+    await audit(user.id, "DRAFT_NARRATIVE", kase.id, { model: usedModel });
 
     return NextResponse.json({ narrative });
   } catch (err) {
