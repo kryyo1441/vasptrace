@@ -3,8 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { canAccessCase, getCurrentUser } from "@/lib/auth";
 import { audit, verifyAuditChain } from "@/lib/audit";
-import { edgeCountLabel, evidenceTrail, hasValueTransfer } from "@/lib/format";
-import { GraphView } from "@/components/graph-view";
+import { assetTotalsLabel, edgeCountLabel, evidenceTrail, hasValueTransfer } from "@/lib/format";
+import { GraphView, LinkedCasesSummary } from "@/components/graph-view";
+import { linkedCasesFor } from "@/lib/linking";
 import { SahyogButton } from "@/components/sahyog-button";
 import { ChainOfCustody } from "@/components/chain-of-custody";
 import { VaspResponseForm } from "@/components/vasp-response-form";
@@ -18,7 +19,7 @@ import { AlertTriangle, ArrowLeft, FileText, Network, Shield, Wallet } from "luc
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
 import { VaspScoreGauge } from "@/components/vasp-score-gauge";
-import { IssuerLeads, UnregisteredExchanges, VaspRecLine } from "@/components/vasp-rec-line";
+import { DesignationAlerts, IssuerLeads, UnregisteredExchanges, VaspRecLine } from "@/components/vasp-rec-line";
 
 export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -48,6 +49,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
 
   const graph: TraceGraph | null = kase.traceResult ? JSON.parse(kase.traceResult) : null;
   const typologyFlags: string[] = kase.typologyFlags ? JSON.parse(kase.typologyFlags) : [];
+  const linked = graph ? await linkedCasesFor(graph, kase.chain, user, kase.id) : {};
 
   return (
     <div className="flex w-full flex-col gap-6 px-6 py-8 lg:px-10 xl:px-16">
@@ -112,7 +114,9 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <GraphView graph={graph} />
+            <LinkedCasesSummary linked={linked} />
+            <GraphView graph={graph} linked={linked} />
+            <DesignationAlerts graph={graph} />
           </CardContent>
         </Card>
       ) : (
@@ -185,6 +189,13 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
                   ...graph.recommendation.top.sameWallet,
                 }
               }
+              depositAddress={graph.recommendation.top.depositAddress}
+              // Same derivation as the routed freeze payload
+              // (app/api/cases/[id]/sahyog/route.ts).
+              amountsAtStake={(() => {
+                const credited = graph.nodes.find((n) => n.address === graph.recommendation!.top.address)?.receivedInTrace;
+                return credited?.length ? assetTotalsLabel(credited, kase.chain) : undefined;
+              })()}
             />
             {kase.status === "ROUTED" && (
               <VaspResponseForm
