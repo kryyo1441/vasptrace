@@ -195,5 +195,44 @@ assert.equal(deriveRiskLevel([{ ...nodes[0], kind: "MIXER" }], []), "HIGH");
 assert.equal(deriveRiskLevel(nodes, ["FAN_OUT", "PEEL_CHAIN"]), "HIGH");
 assert.equal(deriveRiskLevel(nodes, ["FAN_OUT"]), "MEDIUM");
 assert.equal(deriveRiskLevel(nodes, []), "LOW");
+assert.equal(deriveRiskLevel([{ ...nodes[0], kind: "TERROR_FINANCING" }], []), "CRITICAL");
+
+// Deposit address (2026-09-18): the inferred node sending into the
+// recommended exchange is cited; it never changes who is recommended or the
+// score, and an unrelated inferred node isn't picked.
+{
+  const exchange = node("0xbin14", 2, "Binance 14");
+  const deposit: TraceNode = {
+    address: "0xdep",
+    depth: 1,
+    kind: "INTERMEDIARY",
+    entityName: "Binance 14 (inferred deposit address)",
+    confidence: "medium",
+    confidenceReason: "Forwards 95% of its outgoing USDT to a known Binance 14 address",
+    stopReason: null,
+    typologyFlags: [],
+  };
+  const other: TraceNode = { ...deposit, address: "0xother", depth: 0, entityName: "Binance 7 (inferred deposit address)" };
+  const e = (from: string, to: string): TraceEdge => ({
+    from, to, valueWei: "5", kind: "TRANSFER", txCount: 1, latestTxHash: "h", latestTimestamp: 0, typologyFlags: [],
+  });
+  const withDeposit = recommendVasp([exchange, deposit, other], registry, [e("0xdep", "0xbin14"), e("0xother", "0xdep")])!;
+  assert.deepEqual(withDeposit.top.depositAddress, { address: "0xdep", depth: 1, reason: deposit.confidenceReason });
+  assert.equal(withDeposit.top.breakdown.score, recommendVasp([exchange], registry)!.top.breakdown.score);
+  assert.equal(recommendVasp([exchange], registry)!.top.depositAddress, undefined);
+  // A contract call into the exchange isn't a deposit.
+  const call = { ...e("0xdep", "0xbin14"), kind: "CONTRACT_CALL" as const };
+  assert.equal(recommendVasp([exchange, deposit], registry, [call])!.top.depositAddress, undefined);
+
+  // Channel: present when the registry row has one; crossBorder = not FIU-IND.
+  const withChannel = recommendVasp([node("0xkc", 1, "KuCoin 3")], [
+    { name: "KuCoin", fiuindRegistered: false, hasIndiaNodalOfficer: false, responseReliabilityScore: 1,
+      jurisdiction: "Seychelles", leChannel: "KuCoin portal", leChannelUrl: "https://www.kucoin.com/legal/requests" },
+  ])!;
+  assert.deepEqual(withChannel.top.channel, {
+    jurisdiction: "Seychelles", leChannel: "KuCoin portal", leChannelUrl: "https://www.kucoin.com/legal/requests", crossBorder: true,
+  });
+  assert.equal(result.top.channel, undefined, "no channel on a registry row without one");
+}
 
 console.log("scoring self-check passed");

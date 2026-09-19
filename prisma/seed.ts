@@ -330,6 +330,70 @@ const labeledAddresses: {
     entityName: "Arbitrum: Outbox 4 (official L2 exit bridge)",
     source: "Etherscan bridge-label directory (111,212 txns)",
   },
+  // --- Solana exchange wallets (added 2026-09-18) ---
+  // Each is Solscan's own public name tag for the account (the tag is the
+  // account page's title), checked 2026-09-18. solscan.io blocks scripts, so
+  // these were read from its indexed page titles rather than curl; only
+  // addresses whose tag was visible verbatim are seeded. Candidates whose tag
+  // couldn't be confirmed (a claimed Kraken, KuCoin and second Binance hot
+  // wallet) were left out. Entity names avoid Solscan's "OKX: Hot Wallet"
+  // colon form, since lib/scoring.ts matches the registry on the first word.
+  {
+    address: "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9",
+    chain: Chain.SOLANA,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Binance 2",
+    source: "Solscan name tag \"Binance 2\" (solscan.io/account/5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9)",
+  },
+  {
+    address: "GJRs4FwHtemZ5ZE9x3FNvJ8TMwitKTh21yxdRPqn7npE",
+    chain: Chain.SOLANA,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Coinbase Hot Wallet 2",
+    source: "Solscan name tag \"Coinbase Hot Wallet 2\"",
+  },
+  {
+    address: "D89hHJT5Aqyx1trP6EnGY9jJUB3whgnq3aUvvCqedvzf",
+    chain: Chain.SOLANA,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Coinbase Hot Wallet 3",
+    source: "Solscan name tag \"Coinbase Hot Wallet 3\"",
+  },
+  {
+    address: "5VCwKtCXgCJ6kit5FybXjvriW3xELsFDhYrPSqtJNmcD",
+    chain: Chain.SOLANA,
+    labelType: LabelType.EXCHANGE,
+    entityName: "OKX 1",
+    source: "Solscan name tag \"OKX\"",
+  },
+  {
+    address: "C68a6RCGLiPskbPYtAcsCjhG8tfTWYcoB4JjCrXFdqyo",
+    chain: Chain.SOLANA,
+    labelType: LabelType.EXCHANGE,
+    entityName: "OKX Hot Wallet 1",
+    source: "Solscan name tag \"OKX: Hot Wallet\"",
+  },
+  {
+    address: "is6MTRHEgyFLNTfYcuV4QBWLjrZBfmhVNYR6ccgr8KV",
+    chain: Chain.SOLANA,
+    labelType: LabelType.EXCHANGE,
+    entityName: "OKX Hot Wallet 2",
+    source: "Solscan name tag \"OKX: Hot Wallet\"",
+  },
+  {
+    address: "AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2",
+    chain: Chain.SOLANA,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Bybit Hot Wallet",
+    source: "Solscan name tag \"Bybit Hot Wallet\"",
+  },
+  {
+    address: "AobVSwdW9BbpMdJvTqeCN4hPAmh4rHm7vwLnQ5ATSyrS",
+    chain: Chain.SOLANA,
+    labelType: LabelType.EXCHANGE,
+    entityName: "Crypto.com Hot Wallet 2",
+    source: "Solscan name tag \"Crypto.com Hot Wallet 2\"",
+  },
   // --- OFAC SDN ransomware-linked address (first-ever crypto SDN listing) ---
   {
     address: "149w62rY42aZBox8fGcmqNsXUzSStKeq8C",
@@ -340,31 +404,77 @@ const labeledAddresses: {
   },
 ];
 
+const SAHYOG = "https://sahyog.mha.gov.in/";
+const DOMESTIC = "Sahyog Portal (I4C) — Indian FIU-IND reporting entity; serve under BNSS s.94";
+
 const vaspRegistry: {
   name: string;
   fiuindRegistered: boolean;
   hasIndiaNodalOfficer: boolean;
   responseReliabilityScore: number;
+  jurisdiction: string;
+  leChannel: string;
+  leChannelUrl: string;
 }[] = [
   // Status reflects public FIU-IND registration info as of the seed date.
   // fiuindRegistered/hasIndiaNodalOfficer are best-effort from public
   // reporting — verify against the live FIU-IND list before real use.
-  { name: "WazirX", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 4 },
-  { name: "CoinDCX", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 5 },
-  { name: "ZebPay", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 4 },
-  { name: "CoinSwitch", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 4 },
-  { name: "Giottus", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 3 },
-  { name: "Unocoin", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 3 },
-  { name: "BuyUcoin", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 2 },
-  { name: "Bitbns", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 3 },
-  { name: "KoinBX", fiuindRegistered: true, hasIndiaNodalOfficer: false, responseReliabilityScore: 2 },
-  { name: "Binance", fiuindRegistered: true, hasIndiaNodalOfficer: false, responseReliabilityScore: 2 },
-  { name: "Coinbase", fiuindRegistered: false, hasIndiaNodalOfficer: false, responseReliabilityScore: 3 },
-  { name: "Bitfinex", fiuindRegistered: false, hasIndiaNodalOfficer: false, responseReliabilityScore: 1 },
-  { name: "Kraken", fiuindRegistered: false, hasIndiaNodalOfficer: false, responseReliabilityScore: 2 },
-  { name: "KuCoin", fiuindRegistered: false, hasIndiaNodalOfficer: false, responseReliabilityScore: 1 },
-  { name: "OKX", fiuindRegistered: true, hasIndiaNodalOfficer: false, responseReliabilityScore: 2 },
-  { name: "MEXC", fiuindRegistered: false, hasIndiaNodalOfficer: false, responseReliabilityScore: 1 },
+  // jurisdiction/leChannel/leChannelUrl (added 2026-09-18): each offshore
+  // exchange's own published law-enforcement intake page, found and checked
+  // 2026-09-18 (sources in docs/PROGRESS.md's entry for that date); the
+  // jurisdiction is the operating entity's place of incorporation per its
+  // terms of service or public court filings. Re-check before real use.
+  { name: "WazirX", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 4, jurisdiction: "India", leChannel: DOMESTIC, leChannelUrl: SAHYOG },
+  { name: "CoinDCX", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 5, jurisdiction: "India", leChannel: DOMESTIC, leChannelUrl: SAHYOG },
+  { name: "ZebPay", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 4, jurisdiction: "India", leChannel: DOMESTIC, leChannelUrl: SAHYOG },
+  { name: "CoinSwitch", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 4, jurisdiction: "India", leChannel: DOMESTIC, leChannelUrl: SAHYOG },
+  { name: "Giottus", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 3, jurisdiction: "India", leChannel: DOMESTIC, leChannelUrl: SAHYOG },
+  { name: "Unocoin", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 3, jurisdiction: "India", leChannel: DOMESTIC, leChannelUrl: SAHYOG },
+  { name: "BuyUcoin", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 2, jurisdiction: "India", leChannel: DOMESTIC, leChannelUrl: SAHYOG },
+  { name: "Bitbns", fiuindRegistered: true, hasIndiaNodalOfficer: true, responseReliabilityScore: 3, jurisdiction: "India", leChannel: DOMESTIC, leChannelUrl: SAHYOG },
+  { name: "KoinBX", fiuindRegistered: true, hasIndiaNodalOfficer: false, responseReliabilityScore: 2, jurisdiction: "India", leChannel: DOMESTIC, leChannelUrl: SAHYOG },
+  {
+    name: "Binance", fiuindRegistered: true, hasIndiaNodalOfficer: false, responseReliabilityScore: 2,
+    jurisdiction: "Global (no single headquarters); FIU-IND registered for India",
+    leChannel: "Binance Law Enforcement Request System (LERS), run on Kodex — agency sign-up required",
+    leChannelUrl: "https://www.binance.com/en/support/law-enforcement",
+  },
+  {
+    name: "Coinbase", fiuindRegistered: false, hasIndiaNodalOfficer: false, responseReliabilityScore: 3,
+    jurisdiction: "United States",
+    leChannel: "Coinbase law-enforcement portal, run on Kodex — agency sign-up required",
+    leChannelUrl: "https://app.kodexglobal.com/gov/signup",
+  },
+  {
+    name: "Bitfinex", fiuindRegistered: false, hasIndiaNodalOfficer: false, responseReliabilityScore: 1,
+    jurisdiction: "British Virgin Islands",
+    leChannel: "Bitfinex Law Enforcement Requests Policy (requests handled via Kodex)",
+    leChannelUrl: "https://www.bitfinex.com/legal/general/law-enforcement-requests-policy/",
+  },
+  {
+    name: "Kraken", fiuindRegistered: false, hasIndiaNodalOfficer: false, responseReliabilityScore: 2,
+    jurisdiction: "United States",
+    leChannel: "Kraken Compliance & Legal inquiry form",
+    leChannelUrl: "https://support.kraken.com/articles/how-do-i-submit-a-legal-inquiry",
+  },
+  {
+    name: "KuCoin", fiuindRegistered: false, hasIndiaNodalOfficer: false, responseReliabilityScore: 1,
+    jurisdiction: "Seychelles",
+    leChannel: "KuCoin Information Request System — English, signed/sealed request, 10–15 working days",
+    leChannelUrl: "https://www.kucoin.com/legal/requests",
+  },
+  {
+    name: "OKX", fiuindRegistered: true, hasIndiaNodalOfficer: false, responseReliabilityScore: 2,
+    jurisdiction: "Seychelles; FIU-IND registered for India",
+    leChannel: "OKX Law Enforcement Request Guide (requests via Kodex; enforcement@okx.com for emergencies)",
+    leChannelUrl: "https://www.okx.com/en-us/help/okx-law-enforcement-request-guide",
+  },
+  {
+    name: "MEXC", fiuindRegistered: false, hasIndiaNodalOfficer: false, responseReliabilityScore: 1,
+    jurisdiction: "Seychelles",
+    leChannel: "MEXC Law Enforcement Online Request System (LEORS) — access review 15–20 business days; stolen-fund freezes need an abnormal-funds ticket plus an LE request within 48 hours",
+    leChannelUrl: "https://www.mexc.com/support/requests/legal",
+  },
 ];
 
 // Issuer freeze paths (ROADMAP item 3, added 2026-09-14). Facts drawn from

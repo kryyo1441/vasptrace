@@ -128,3 +128,13 @@ export async function getOutgoingTransfers(
   }
   return { outgoing, coSpenders };
 }
+
+/** One Bitcoin transaction by txid (tx-hash intake, lib/txresolve.ts). Null on 404. */
+export async function getTransaction(txid: string): Promise<EsploraTx | null> {
+  return withPacing("blockstream", API_PACING_MS, async () => {
+    const res = await fetch(`${BLOCKSTREAM_BASE}/tx/${txid}`);
+    if (res.status === 404 || res.status === 400) return null;
+    if (!res.ok) throw new Error(`Blockstream API request failed: ${res.status}`);
+    return (await res.json()) as EsploraTx;
+  });
+}

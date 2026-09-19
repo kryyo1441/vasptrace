@@ -108,3 +108,12 @@ export async function getBscNativeBalance(address: string): Promise<string> {
   const native = pickNativeAsset(result?.assets ?? [], "BNB");
   return native?.balanceRawInteger ?? "0";
 }
+
+/** One BNB Chain transaction by hash (tx-hash intake, lib/txresolve.ts). */
+export async function getBscTransactionByHash(hash: string): Promise<AnkrTransaction | null> {
+  const result = await rpc<{ transactions?: AnkrTransaction[] }>("ankr_getTransactionsByHash", {
+    blockchain: "bsc",
+    transactionHash: hash,
+  });
+  return result?.transactions?.[0] ?? null;
+}

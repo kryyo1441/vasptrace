@@ -139,3 +139,27 @@ async function accountCall<T>(chainId: number, action: "txlist" | "tokentx", add
     return data.result as T[];
   });
 }
+
+// One JSON-RPC-over-REST call through Etherscan's proxy module — used to turn
+// a pasted transaction hash into its recipient (lib/txresolve.ts). Same
+// pacing queue as every other Etherscan call.
+export async function proxyCall<T>(chainId: number, action: "eth_getTransactionByHash" | "eth_getTransactionReceipt", txhash: string): Promise<T | null> {
+  const apiKey = process.env.ETHERSCAN_API_KEY;
+  if (!apiKey) throw new Error("ETHERSCAN_API_KEY is not set");
+  const url = new URL(ETHERSCAN_BASE);
+  url.searchParams.set("chainid", String(chainId));
+  url.searchParams.set("module", "proxy");
+  url.searchParams.set("action", action);
+  url.searchParams.set("txhash", txhash);
+  url.searchParams.set("apikey", apiKey);
+  return withPacing("etherscan", API_PACING_MS, async () => {
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error(`Etherscan API request failed: ${res.status}`);
+    const data = await res.json();
+    // The proxy module answers JSON-RPC-shaped: an error object, or a string
+    // result on key/rate problems ("Max rate limit reached").
+    if (data.error) throw new Error(`Etherscan API error: ${data.error.message ?? "unknown error"}`);
+    if (typeof data.result === "string") throw new Error(`Etherscan API error: ${data.result}`);
+    return (data.result ?? null) as T | null;
+  });
+}

@@ -1,9 +1,9 @@
 // LIVE: traces real on-chain Bitcoin transfers via Blockstream, hop by hop.
 import { getAddressStats, getOutgoingTransfers } from "@/lib/blockstream";
-import { traceChain } from "./bfs";
+import { traceChain, type OnProgress } from "./bfs";
 import type { TraceGraph } from "./types";
 
-export async function traceBitcoin(rootAddress: string, maxDepth: number): Promise<TraceGraph> {
+export async function traceBitcoin(rootAddress: string, maxDepth: number, onProgress?: OnProgress): Promise<TraceGraph> {
   return traceChain(
     {
       chain: "BITCOIN",
@@ -26,6 +26,7 @@ export async function traceBitcoin(rootAddress: string, maxDepth: number): Promi
       },
     },
     rootAddress,
-    maxDepth
+    maxDepth,
+    onProgress
   );
 }

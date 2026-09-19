@@ -6,6 +6,11 @@ import { CHAIN_UNIT, isContractCall } from "@/lib/format";
 import type { Chain, IssuerRegistry, RiskLevel, VaspRegistry } from "@/lib/generated/prisma/client";
 import type { IssuerLead, TraceEdge, TraceGraph, TraceNode, TypologyFlag, VaspRecommendation, VaspScoreBreakdown } from "@/lib/tracers/types";
 
+// The registry fields scoring reads. Channel fields are optional so a
+// pre-2026-09-18 registry row (or a test fixture) still scores.
+type RegistryEntry = Pick<VaspRegistry, "name" | "fiuindRegistered" | "hasIndiaNodalOfficer" | "responseReliabilityScore"> &
+  Partial<Pick<VaspRegistry, "jurisdiction" | "leChannel" | "leChannelUrl">>;
+
 const FIUIND_WEIGHT = 3;
 const NODAL_OFFICER_WEIGHT = 2;
 const HOP_PENALTY = 1;
@@ -27,7 +32,7 @@ function registryNameFor(entityName: string): string {
   return entityName.split(/[\s(]/)[0];
 }
 
-function scoreVasp(depth: number, vasp: VaspRegistry): VaspScoreBreakdown {
+function scoreVasp(depth: number, vasp: RegistryEntry): VaspScoreBreakdown {
   const score =
     (vasp.fiuindRegistered ? FIUIND_WEIGHT : 0) +
     (vasp.hasIndiaNodalOfficer ? NODAL_OFFICER_WEIGHT : 0) +
@@ -42,9 +47,34 @@ function scoreVasp(depth: number, vasp: VaspRegistry): VaspScoreBreakdown {
   };
 }
 
+function channelFor(vasp: RegistryEntry): VaspRecommendation["channel"] {
+  if (!vasp.leChannel) return undefined;
+  return {
+    jurisdiction: vasp.jurisdiction ?? "",
+    leChannel: vasp.leChannel,
+    leChannelUrl: vasp.leChannelUrl ?? "",
+    crossBorder: !vasp.fiuindRegistered,
+  };
+}
+
+// The deposit address in front of an exchange node: a node that sends to it
+// and that lib/clustering.ts inferred as "<that label> (inferred deposit
+// address)" (forwards ≥80% of an asset to it). Nearest to the suspect wins —
+// that's where the suspect's funds were first credited. Read, not computed:
+// clustering already did the work and wrote the reason.
+function depositAddressFor(exchange: TraceNode, nodes: TraceNode[], edges: TraceEdge[]): VaspRecommendation["depositAddress"] {
+  const inferredName = `${exchange.entityName} (inferred deposit address)`;
+  const senders = new Set(edges.filter((e) => e.to === exchange.address && !isContractCall(e)).map((e) => e.from));
+  const best = nodes
+    .filter((n) => senders.has(n.address) && n.confidence === "medium" && n.entityName === inferredName)
+    .sort((a, b) => a.depth - b.depth)[0];
+  return best && { address: best.address, depth: best.depth, reason: best.confidenceReason ?? "" };
+}
+
 export function recommendVasp(
   nodes: TraceNode[],
-  vaspRegistry: VaspRegistry[]
+  vaspRegistry: RegistryEntry[],
+  edges: TraceEdge[] = []
 ): { top: VaspRecommendation; alternatives: VaspRecommendation[] } | null {
   const registryByName = new Map(vaspRegistry.map((v) => [v.name, v]));
 
@@ -53,11 +83,15 @@ export function recommendVasp(
     if (node.kind !== "EXCHANGE" || node.confidence !== "high" || !node.entityName) continue;
     const vasp = registryByName.get(registryNameFor(node.entityName));
     if (!vasp) continue;
+    const depositAddress = depositAddressFor(node, nodes, edges);
+    const channel = channelFor(vasp);
     candidates.push({
       address: node.address,
       entityName: node.entityName,
       vaspName: vasp.name,
       breakdown: scoreVasp(node.depth, vasp),
+      ...(depositAddress && { depositAddress }),
+      ...(channel && { channel }),
     });
   }
 
@@ -71,6 +105,7 @@ export function recommendVasp(
       vaspName: vasp.name,
       breakdown: scoreVasp(node.depth, vasp),
       sameWallet: { labeledAddress: node.coSpend.labeledAddress, txHash: node.coSpend.txHash },
+      ...(channelFor(vasp) && { channel: channelFor(vasp) }),
     });
   }
 
@@ -102,7 +137,7 @@ export function recommendVasp(
 // one entry per exchange name, nearest first.
 export function unregisteredExchanges(
   nodes: TraceNode[],
-  vaspRegistry: VaspRegistry[]
+  vaspRegistry: RegistryEntry[]
 ): { entityName: string; address: string; depth: number }[] {
   const registered = new Set(vaspRegistry.map((v) => v.name));
   const seen = new Set<string>();
@@ -219,7 +254,8 @@ export function aggregateReceivedByVasp(cases: { chain: Chain; traceResult: stri
 // RiskLevel per case) — rule-based on the same signals typology/labeling
 // already computed, not a separate model.
 export function deriveRiskLevel(nodes: TraceNode[], typologyFlags: TypologyFlag[]): RiskLevel {
-  if (nodes.some((n) => n.kind === "DARKNET" || n.kind === "RANSOMWARE" || n.kind === "SANCTIONED")) return "CRITICAL";
+  if (nodes.some((n) => n.kind === "DARKNET" || n.kind === "RANSOMWARE" || n.kind === "SANCTIONED" || n.kind === "TERROR_FINANCING"))
+    return "CRITICAL";
   if (nodes.some((n) => n.kind === "MIXER") || typologyFlags.length >= 2) return "HIGH";
   if (typologyFlags.length >= 1) return "MEDIUM";
   return "LOW";

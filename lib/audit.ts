@@ -10,11 +10,14 @@ export type AuditAction =
   | "VIEW_CASE"
   | "DOWNLOAD_REPORT"
   | "ROUTE_SAHYOG"
+  | "ROUTE_FREEZE"
+  | "DELETE_CASE"
   | "VASP_RESPONSE"
   | "DRAFT_NARRATIVE"
   | "WATCH_ADD"
   | "WATCH_CHECK"
-  | "SANCTIONS_SYNC";
+  | "SANCTIONS_SYNC"
+  | "TERROR_SYNC";
 
 const GENESIS = "GENESIS";
 

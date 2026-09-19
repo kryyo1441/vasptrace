@@ -9,6 +9,7 @@ import { traceArbitrum, traceEthereum, tracePolygon } from "@/lib/tracers/ethere
 import { traceBitcoin } from "@/lib/tracers/bitcoin";
 import { traceTron } from "@/lib/tracers/tron";
 import { traceBsc } from "@/lib/tracers/bsc";
+import { traceSolana } from "@/lib/tracers/solana";
 import { deriveRiskLevel } from "@/lib/scoring";
 import { notifyN8n } from "@/lib/n8n";
 import { audit } from "@/lib/audit";
@@ -16,15 +17,17 @@ import { prisma } from "@/lib/prisma";
 import { CHAIN_LABEL } from "@/lib/format";
 import { ADDRESS_VALIDATORS, detectChains } from "@/lib/address";
 import type { Chain } from "@/lib/generated/prisma/client";
+import type { OnProgress } from "@/lib/tracers/bfs";
 import type { TraceGraph } from "@/lib/tracers/types";
 
-export const TRACERS: Record<Chain, (address: string, maxDepth: number) => Promise<TraceGraph>> = {
+export const TRACERS: Record<Chain, (address: string, maxDepth: number, onProgress?: OnProgress) => Promise<TraceGraph>> = {
   ETHEREUM: traceEthereum,
   POLYGON: tracePolygon,
   ARBITRUM: traceArbitrum,
   BSC: traceBsc,
   BITCOIN: traceBitcoin,
   TRON: traceTron,
+  SOLANA: traceSolana,
 };
 
 export type TraceInput = { address: string; chain: Chain; maxDepth: number };
@@ -80,8 +83,13 @@ export function isTraceInputError(v: TraceInput | TraceInputError): v is TraceIn
  * human investigator behind it — the same nullable field already used for
  * the pre-auth cases (see prisma/schema.prisma's Case.createdById comment).
  */
-export async function runTrace(input: TraceInput, createdById: string | null, source?: "sahyog") {
-  const graph = await TRACERS[input.chain](input.address, input.maxDepth);
+export async function runTrace(
+  input: TraceInput,
+  createdById: string | null,
+  source?: "sahyog",
+  onProgress?: OnProgress
+) {
+  const graph = await TRACERS[input.chain](input.address, input.maxDepth, onProgress);
 
   const typologyFlags = Array.from(new Set(graph.nodes.flatMap((n) => n.typologyFlags)));
   const savedCase = await prisma.case.create({

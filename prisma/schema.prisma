@@ -23,6 +23,9 @@ enum Chain {
   // so it goes through Ankr's Advanced API instead — a different provider and
   // a different request shape, hence its own client and adapter.
   BSC
+  // Solana (added 2026-09-18). Named in problem statement 26182. Non-EVM:
+  // its own address format and client (lib/solana.ts, public JSON-RPC).
+  SOLANA
 }
 
 enum LabelType {
@@ -35,6 +38,12 @@ enum LabelType {
   // OFAC SDN-listed addresses, written only by the sanctions sync
   // (lib/sanctions.ts) — never by hand. Added 2026-09-14.
   SANCTIONED
+  // Terror-financing designations (added 2026-09-18): Israel NBCTF seizure
+  // orders (via OpenSanctions) and OFAC SDN entries under the SDGT program.
+  // Written only by lib/terror.ts / the sanctions sync, never by hand. Split
+  // from SANCTIONED because PS 26182 names terrorism financing explicitly
+  // and an investigator must see *why* a node is critical, not just that it is.
+  TERROR_FINANCING
 }
 
 // Real seed data: known exchange hot wallets, OFAC SDN crypto addresses,
@@ -59,6 +68,14 @@ model VaspRegistry {
   fiuindRegistered         Boolean
   hasIndiaNodalOfficer     Boolean
   responseReliabilityScore Int // 1-5
+  // Cross-border routing (added 2026-09-18): where the VASP is incorporated
+  // and the channel an Indian LEA actually uses to reach it. For an offshore,
+  // non-FIU-IND VASP this is the difference between "score -2, dead end" and
+  // "file on their LE portal, or a letter of request via MHA". Facts with a
+  // source URL, not scored.
+  jurisdiction             String @default("")
+  leChannel                String @default("")
+  leChannelUrl             String @default("")
 }
 
 // Stablecoin issuers (ROADMAP item 3, added 2026-09-14). For a USDT/USDC

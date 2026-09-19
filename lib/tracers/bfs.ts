@@ -44,7 +44,24 @@ export interface ChainAdapter {
   fetchStats?: (address: string) => Promise<{ balanceBaseUnits: string; totalReceivedBaseUnits?: string }>;
 }
 
-export async function traceChain(adapter: ChainAdapter, rootAddress: string, maxDepth: number): Promise<TraceGraph> {
+// Progress reporting (added 2026-09-18) — a status line, not incremental
+// graph mutation: cheap (no extra API calls, just the counts traceChain
+// already tracks) and low-risk, since every chain shares this one function.
+// See PS 26182's "real-time generation of investigative intelligence" and
+// docs/ROADMAP.md item 7's write-up on why a live-rebuilt canvas was rejected.
+export interface TraceProgress {
+  nodesVisited: number;
+  queued: number;
+  currentAddress: string;
+}
+export type OnProgress = (p: TraceProgress) => void;
+
+export async function traceChain(
+  adapter: ChainAdapter,
+  rootAddress: string,
+  maxDepth: number,
+  onProgress?: OnProgress
+): Promise<TraceGraph> {
   const root = adapter.normalize(rootAddress);
 
   const labels = await prisma.labeledAddress.findMany({ where: { chain: adapter.chain } });
@@ -81,6 +98,7 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
     const node = nodes.get(address)!;
 
     if (node.stopReason) continue; // labeled stop or already flagged, don't expand
+    onProgress?.({ nodesVisited: nodes.size, queued: queue.length, currentAddress: address });
     if (depth >= maxDepth) {
       node.stopReason = "MAX_DEPTH";
       continue;
@@ -249,7 +267,7 @@ export async function traceChain(adapter: ChainAdapter, rootAddress: string, max
     nodes: nodeList,
     edges,
     warnings,
-    recommendation: recommendVasp(nodeList, vaspRegistry),
+    recommendation: recommendVasp(nodeList, vaspRegistry, edges),
     unregisteredExchanges: unregisteredExchanges(nodeList, vaspRegistry),
     issuerLeads: issuerLeads(edges, issuerRegistry),
   };

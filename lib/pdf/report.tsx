@@ -3,7 +3,17 @@
 // the report always matches exactly what was shown on screen at trace time.
 import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
-import { assetTotalsLabel, edgeCountLabel, formatAssetValue, isContractCall, lowActionabilityNote, sameWalletEvidence } from "@/lib/format";
+import {
+  assetTotalsLabel,
+  channelLine,
+  CROSS_BORDER_NOTE,
+  depositAddressLine,
+  edgeCountLabel,
+  formatAssetValue,
+  isContractCall,
+  lowActionabilityNote,
+  sameWalletEvidence,
+} from "@/lib/format";
 import type { Case, RiskLevel } from "@/lib/generated/prisma/client";
 import type { TraceGraph } from "@/lib/tracers/types";
 
@@ -166,6 +176,26 @@ export function CaseReportDocument({ kase, graph }: { kase: Case; graph: TraceGr
                 </View>
                 {/* Full width, like the evidence trail: a 64-char txid won't fit the label/value columns. */}
                 <Text style={[styles.subtitle, styles.mono]}>{sameWalletEvidence(graph.recommendation.top)}</Text>
+              </View>
+            )}
+            {graph.recommendation.top.depositAddress && (
+              // Full width: the address alone is up to 44 chars.
+              <Text style={[styles.subtitle, styles.mono, { marginBottom: 3 }]}>
+                {depositAddressLine(graph.recommendation.top)}
+              </Text>
+            )}
+            {graph.recommendation.top.channel && (
+              <View style={{ marginBottom: 3 }}>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Routing channel</Text>
+                  <Text style={styles.value}>{channelLine(graph.recommendation.top)}</Text>
+                </View>
+                {graph.recommendation.top.channel.leChannelUrl && (
+                  <Text style={[styles.subtitle, styles.mono]}>{graph.recommendation.top.channel.leChannelUrl}</Text>
+                )}
+                {graph.recommendation.top.channel.crossBorder && (
+                  <Text style={styles.simulatedNote}>{CROSS_BORDER_NOTE}</Text>
+                )}
               </View>
             )}
             {graph.recommendation.alternatives.map((alt) => (

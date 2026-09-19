@@ -8,6 +8,7 @@ export const CHAIN_LABEL: Record<Chain, string> = {
   BSC: "BNB Chain",
   BITCOIN: "Bitcoin",
   TRON: "Tron",
+  SOLANA: "Solana",
 };
 
 // Shared with app/api/cases/[id]/sahyog/route.ts's simulated payload — kept
@@ -19,6 +20,48 @@ export const CHAIN_LABEL: Record<Chain, string> = {
 // reader on either code can place it. Still needs sign-off from someone with
 // legal training before any real use.
 export const LEGAL_BASIS = "Section 94, Bharatiya Nagarik Suraksha Sanhita, 2023 (formerly Section 91, CrPC)";
+
+// Freeze requests (added 2026-09-18) — PS 26182 asks for "disclosure or
+// freezing requests". BNSS s.106 is the successor to CrPC s.102 (police
+// seizure of property connected with an offence — the provision Indian police
+// have long used for bank-account freezes, per State of Maharashtra v. Tapas
+// D. Neogy, 1999). Two limits are stated in the payload rather than left out:
+// s.106(3) requires the seizure be reported forthwith to the jurisdictional
+// Magistrate, and several High Courts have held s.106 does not itself
+// authorise a debit-freeze — attaching proceeds of crime needs a Magistrate's
+// order under s.107. Same caveat as LEGAL_BASIS: needs sign-off from someone
+// with legal training before any real use.
+export const FREEZE_LEGAL_BASIS =
+  "Section 106, Bharatiya Nagarik Suraksha Sanhita, 2023 (formerly Section 102, CrPC) — seizure of property connected with an offence";
+export const FREEZE_LEGAL_CAVEAT =
+  "The seizure must be reported forthwith to the jurisdictional Magistrate (BNSS s.106(3)). Courts have held s.106 does not by itself authorise a debit-freeze; attachment of proceeds of crime requires a Magistrate's order under BNSS s.107.";
+
+// Offshore VASPs owe an Indian LEA nothing domestically; a voluntary request
+// on their own LE portal is the fast path, and a Letter of Request under BNSS
+// s.112 (formerly CrPC s.166A), sent through the Ministry of Home Affairs, is
+// the compelled one. Shown next to any non-FIU-IND recommendation.
+export const CROSS_BORDER_NOTE =
+  "Not FIU-IND registered — no domestic obligation to respond. Fast path: a voluntary request on the exchange's own law-enforcement portal. Compelled path: a Letter of Request under BNSS s.112 (formerly CrPC s.166A), routed through the Ministry of Home Affairs.";
+
+export type RequestKind = "DISCLOSURE" | "FREEZE";
+
+export function channelLine(rec: VaspRecommendation): string {
+  if (!rec.channel) return "";
+  return `${rec.channel.jurisdiction} · ${rec.channel.leChannel}`;
+}
+
+// Everything about the deposit address except the address itself, so the UI
+// can set the address in monospace; the PDF uses depositAddressLine whole.
+export function depositAddressNote(rec: VaspRecommendation): string {
+  const d = rec.depositAddress;
+  if (!d) return "";
+  const where = d.depth === 0 ? "the suspect address itself" : `hop ${d.depth}`;
+  return `(inferred, ${where}) — ${d.reason}. Ask ${rec.vaspName} for the account this deposit address is assigned to.`;
+}
+
+export function depositAddressLine(rec: VaspRecommendation): string {
+  return rec.depositAddress ? `Deposit address ${rec.depositAddress.address} ${depositAddressNote(rec)}` : "";
+}
 
 // CSS custom properties (light/dark pair defined in app/globals.css) rather
 // than raw hex — the flat brand hues here failed WCAG AA text contrast
@@ -75,6 +118,7 @@ export const CHAIN_UNIT: Record<Chain, { symbol: string; decimals: number }> = {
   BSC: { symbol: "BNB", decimals: 18 },
   BITCOIN: { symbol: "BTC", decimals: 8 },
   TRON: { symbol: "TRX", decimals: 6 },
+  SOLANA: { symbol: "SOL", decimals: 9 }, // lamports
 };
 
 // Decimals for a token symbol, independent of which chain it's on — every
@@ -218,12 +262,21 @@ export function buildEmailDraft({
   evidenceTrail,
   valueMoved,
   attribution,
+  depositAddress,
+  kind = "DISCLOSURE",
+  amountsAtStake,
 }: {
   caseId: string;
   vaspName: string;
   address: string;
   chain: Chain;
   evidenceTrail: string[];
+  // Inferred deposit address in front of the VASP's labeled wallet — cited as
+  // the account selector, always marked as an inference.
+  depositAddress?: VaspRecommendation["depositAddress"];
+  kind?: RequestKind;
+  // Freeze only: what this trace saw credited to the VASP, already formatted.
+  amountsAtStake?: string;
   // False when the trace found no value transfer at all — the headline demo
   // address is like this: 92 zero-value calls into WazirX's multisig and not
   // a wei moved. The draft then must not ask about "funds received", because
@@ -231,18 +284,37 @@ export function buildEmailDraft({
   valueMoved: boolean;
   attribution?: Attribution;
 }) {
+  const noun = kind === "FREEZE" ? "Freeze" : "Disclosure";
   const subject = attribution
-    ? `Ownership Confirmation and Disclosure Request — Case ${caseId} — ${vaspName}`
-    : `Disclosure Request — Case ${caseId} — ${vaspName}`;
+    ? `Ownership Confirmation and ${noun} Request — Case ${caseId} — ${vaspName}`
+    : `${noun} Request — Case ${caseId} — ${vaspName}`;
+  const depositBlock = depositAddress
+    ? `\nDeposit address (inferred): ${depositAddress.address}
+${depositAddress.depth === 0 ? "The suspect address itself" : `This address (hop ${depositAddress.depth})`} forwards most of its value to your
+labeled wallet, so it appears to be a deposit address you assigned to a
+customer. This is an inference, not a confirmed label — please identify the
+account it is assigned to, or tell us it is not yours.\n`
+    : "";
+  const freezeBlock =
+    kind === "FREEZE"
+      ? `
+Freeze requested:
+Please place an immediate hold on the account(s) that received funds traced
+from the suspect address, pending a Magistrate's order.${amountsAtStake ? `
+Credited to your platform in this trace: ${amountsAtStake}.` : ""}
+Legal basis: ${FREEZE_LEGAL_BASIS}.
+${FREEZE_LEGAL_CAVEAT}
+`
+      : "";
   const body = `To: ${vaspName} Compliance / Legal Team
 
-This is a disclosure request in relation to a law-enforcement investigation
-under ${LEGAL_BASIS.replace(" (formerly", "\n(formerly")}.
+This is a ${noun.toLowerCase()} request in relation to a law-enforcement investigation
+under ${(kind === "FREEZE" ? FREEZE_LEGAL_BASIS.split(" — ")[0] : LEGAL_BASIS).replace(" (formerly", "\n(formerly")}.
 
 Suspect address: ${address}
 Chain: ${CHAIN_LABEL[chain]}
 Case reference: ${caseId}
-
+${depositBlock}${freezeBlock}
 ${
     // Checked first: a same-wallet inference is Bitcoin-only, where every
     // edge is a value transfer, so the no-value branch below can't apply.
@@ -276,7 +348,7 @@ ${evidenceTrail.length > 0 ? evidenceTrail.map((h) => `- ${h}`).join("\n") : "(n
 
 Please respond to this request at your earliest convenience.
 
-— Generated by VASPtrace. This is a simulated disclosure-request draft —
+— Generated by VASPtrace. This is a simulated ${noun.toLowerCase()}-request draft —
 Sahyog API access is not yet publicly available. Review before sending
 through your organization's own official channel.`;
   return { subject, body };

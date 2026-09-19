@@ -163,3 +163,24 @@ export function getOutgoingUsdtTransfers(address: string): Promise<TronOutgoing[
   });
   });
 }
+
+export interface TronTxInfo {
+  contractType?: number;
+  contractRet?: string;
+  ownerAddress?: string;
+  toAddress?: string;
+  contractData?: { amount?: number };
+  trc20TransferInfo?: { from_address: string; to_address: string; contract_address: string; amount_str: string }[];
+}
+
+/** One Tron transaction by hash (tx-hash intake, lib/txresolve.ts). Null when Tronscan doesn't know it. */
+export async function getTransactionInfo(hash: string): Promise<TronTxInfo | null> {
+  const url = new URL("https://apilist.tronscanapi.com/api/transaction-info");
+  url.searchParams.set("hash", hash);
+  return withPacing("tronscan", API_PACING_MS, async () => {
+    const res = await fetch(url.toString(), { headers: headers() });
+    if (!res.ok) throw new Error(`Tronscan transaction-info request failed: ${res.status}`);
+    const data = (await res.json()) as TronTxInfo;
+    return data && data.contractType !== undefined ? data : null;
+  });
+}

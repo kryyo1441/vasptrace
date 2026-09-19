@@ -292,4 +292,27 @@ assert.equal(formatAssetValue("100000000", undefined, "BITCOIN"), "1.0000 BTC");
   assert.equal(formatBySymbol("1000000", "USDT0"), "1.0000 USDT0"); // unknown symbol -> 6dp fallback
 }
 
+// Freeze draft + deposit address (2026-09-18).
+{
+  const base = { caseId: "c1", vaspName: "Binance", address: "0xs", chain: "ETHEREUM" as const, evidenceTrail: ["txA"], valueMoved: true };
+  const disclosure = buildEmailDraft(base);
+  assert.doesNotMatch(disclosure.body, /Freeze requested|Deposit address/, "a plain disclosure draft is unchanged");
+  assert.match(disclosure.body, /Section 94/);
+
+  const freeze = buildEmailDraft({ ...base, kind: "FREEZE", amountsAtStake: "12.0000 USDT" });
+  assert.match(freeze.subject, /^Freeze Request — Case c1/);
+  assert.match(freeze.body, /Section 106/);
+  assert.match(freeze.body, /Magistrate/);
+  assert.match(freeze.body, /Credited to your platform in this trace: 12\.0000 USDT\./);
+  assert.match(freeze.body, /simulated freeze-request draft/);
+
+  const deposit = { address: "0xdep", depth: 0, reason: "Forwards 95% of its outgoing USDT to a known Binance 14 address" };
+  const withDeposit = buildEmailDraft({ ...base, depositAddress: deposit });
+  assert.match(withDeposit.body, /Deposit address \(inferred\): 0xdep/);
+  assert.match(withDeposit.body, /The suspect address itself forwards/);
+  assert.match(withDeposit.body, /This is an inference, not a confirmed label/);
+  for (const line of withDeposit.body.split("\n")) assert.ok(line.length <= 80, `draft line too long: ${line}`);
+  for (const line of freeze.body.split("\n")) assert.ok(line.length <= 80 || /^(Legal basis|The seizure)/.test(line), `draft line too long: ${line}`);
+}
+
 console.log("format self-check passed");

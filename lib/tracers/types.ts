@@ -12,7 +12,11 @@ export type NodeKind =
   // OFAC SDN-listed, from the live sync (lib/sanctions.ts, ROADMAP item 5) —
   // distinct from RANSOMWARE/DARKNET since a sanctioned address isn't
   // necessarily either of those categories.
-  | "SANCTIONED";
+  | "SANCTIONED"
+  // Terror-financing designation (Israel NBCTF seizure order, or OFAC SDGT) —
+  // lib/terror.ts. Split from SANCTIONED so the reason for CRITICAL is on the
+  // node itself. Added 2026-09-18.
+  | "TERROR_FINANCING";
 
 export type StopReason = "LABEL_MATCH" | "MAX_DEPTH" | "API_ERROR" | null;
 
@@ -138,6 +142,20 @@ export interface VaspRecommendation {
   // payload and draft then ask the VASP to confirm ownership first. Absent =
   // exact label match, including every case stored before 2026-09-14.
   sameWallet?: { labeledAddress: string; txHash: string };
+  // The exchange's *deposit* address the funds were credited to, when the
+  // trace shows one (added 2026-09-18). An exchange keys customer KYC on the
+  // deposit address, not on the hot wallet it sweeps into, so this is the
+  // selector the request should cite. Inferred (the forwards-≥80% rule in
+  // lib/clustering.ts) — it never drives the recommendation itself, which
+  // stays on the exact label above; it is a cited lead only. May equal the
+  // suspect address (depth 0) when the suspect wallet itself behaves like a
+  // deposit address. Absent when no such node sits in front of the exchange.
+  depositAddress?: { address: string; depth: number; reason: string };
+  // How an Indian LEA actually reaches this VASP (added 2026-09-18) — the
+  // registry's jurisdiction and published law-enforcement channel. Facts, not
+  // scored. `crossBorder` = not FIU-IND registered, so there is no domestic
+  // obligation to answer. Absent on cases stored before 2026-09-18.
+  channel?: { jurisdiction: string; leChannel: string; leChannelUrl: string; crossBorder: boolean };
 }
 
 export interface TraceGraph {

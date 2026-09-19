@@ -19,6 +19,13 @@ export const ADDRESS_VALIDATORS: Record<Chain, RegExp> = {
   // case-folded.
   BITCOIN: /^(1[a-km-zA-HJ-NP-Z1-9]{25,34}|3[a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{25,90})$/,
   TRON: /^T[1-9A-HJ-NP-Za-km-z]{33}$/,
+  // Base58 32-byte public key. Deliberately 43–44 characters only: that is
+  // what virtually every Solana key encodes to, and it keeps the family
+  // disjoint from Bitcoin (≤35 base58, or bech32 at 42/62) and Tron (34) —
+  // the property detectChains and the wrong-chain message rely on.
+  // ponytail: a key with leading zero bytes encodes shorter and is rejected;
+  // vanishingly rare for a real wallet.
+  SOLANA: /^[1-9A-HJ-NP-Za-km-z]{43,44}$/,
 };
 
 // Every chain an address is well-formed for — which lets the API tell

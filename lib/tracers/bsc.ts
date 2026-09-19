@@ -4,12 +4,12 @@
 // way they are on Ethereum/Polygon/Arbitrum. That gap is stated in the UI
 // through the same "no labels seeded" style warning rather than left silent.
 import { getBscNativeBalance, getBscTransactions, hexToDecimalString } from "@/lib/ankr";
-import { traceChain } from "./bfs";
+import { traceChain, type OnProgress } from "./bfs";
 import type { TraceGraph } from "./types";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-export function traceBsc(rootAddress: string, maxDepth: number): Promise<TraceGraph> {
+export function traceBsc(rootAddress: string, maxDepth: number, onProgress?: OnProgress): Promise<TraceGraph> {
   return traceChain(
     {
       chain: "BSC",
@@ -36,6 +36,7 @@ export function traceBsc(rootAddress: string, maxDepth: number): Promise<TraceGr
       fetchStats: async (address) => ({ balanceBaseUnits: await getBscNativeBalance(address) }),
     },
     rootAddress,
-    maxDepth
+    maxDepth,
+    onProgress
   );
 }
