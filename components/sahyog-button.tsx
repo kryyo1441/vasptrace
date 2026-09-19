@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { buildEmailDraft, type Attribution } from "@/lib/format";
+import { buildEmailDraft, type Attribution, type RequestKind } from "@/lib/format";
+import type { VaspRecommendation } from "@/lib/tracers/types";
 import type { Chain } from "@/lib/generated/prisma/client";
-import { Check, Copy, Send } from "lucide-react";
+import { Check, Copy, Send, Snowflake } from "lucide-react";
 
 export function SahyogButton({
   caseId,
@@ -17,6 +18,8 @@ export function SahyogButton({
   evidenceTrail,
   valueMoved,
   attribution,
+  depositAddress,
+  amountsAtStake,
 }: {
   caseId: string;
   vaspName: string;
@@ -26,21 +29,27 @@ export function SahyogButton({
   evidenceTrail: string[];
   valueMoved: boolean;
   attribution?: Attribution;
+  depositAddress?: VaspRecommendation["depositAddress"];
+  amountsAtStake?: string;
 }) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<RequestKind | null>(null);
   const [payload, setPayload] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [routed, setRouted] = useState(alreadyRouted);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<RequestKind | null>(null);
   const router = useRouter();
 
-  async function route() {
-    setLoading(true);
+  async function route(kind: RequestKind) {
+    setLoading(kind);
     setError(null);
     setWarning(null);
     try {
-      const res = await fetch(`/api/cases/${caseId}/sahyog`, { method: "POST" });
+      const res = await fetch(`/api/cases/${caseId}/sahyog`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Routing failed");
       setPayload(data.payload);
@@ -53,16 +62,27 @@ export function SahyogButton({
     } catch (err) {
       setError((err as Error).message);
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   }
 
-  async function copyEmailDraft() {
-    const { subject, body } = buildEmailDraft({ caseId, vaspName, address, chain, evidenceTrail, valueMoved, attribution });
+  async function copyEmailDraft(kind: RequestKind) {
+    const { subject, body } = buildEmailDraft({
+      caseId,
+      vaspName,
+      address,
+      chain,
+      evidenceTrail,
+      valueMoved,
+      attribution,
+      depositAddress,
+      kind,
+      amountsAtStake,
+    });
     try {
       await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopied(kind);
+      setTimeout(() => setCopied(null), 2000);
     } catch {
       // clipboard API can be unavailable (permissions, insecure context) —
       // fail quietly rather than throwing; the button just doesn't confirm.
@@ -72,17 +92,27 @@ export function SahyogButton({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={route} disabled={loading} variant={routed ? "outline" : "default"}>
+        <Button onClick={() => route("DISCLOSURE")} disabled={!!loading} variant={routed ? "outline" : "default"}>
           <Send className="size-4" />
-          {loading
+          {loading === "DISCLOSURE"
             ? "Routing…"
             : routed
               ? `Re-route to ${vaspName}`
               : `Route ${attribution ? "ownership-confirmation" : "disclosure"} request to ${vaspName}`}
         </Button>
-        <Button onClick={copyEmailDraft} variant="outline">
-          {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-          {copied ? "Copied" : "Copy email draft"}
+        {/* PS 26182: "disclosure or freezing requests". Time-critical — funds
+            credited to an exchange account can be withdrawn within hours. */}
+        <Button onClick={() => route("FREEZE")} disabled={!!loading} variant="outline">
+          <Snowflake className="size-4" />
+          {loading === "FREEZE" ? "Routing…" : `Route freeze request to ${vaspName}`}
+        </Button>
+        <Button onClick={() => copyEmailDraft("DISCLOSURE")} variant="outline">
+          {copied === "DISCLOSURE" ? <Check className="size-4" /> : <Copy className="size-4" />}
+          {copied === "DISCLOSURE" ? "Copied" : "Copy disclosure draft"}
+        </Button>
+        <Button onClick={() => copyEmailDraft("FREEZE")} variant="outline">
+          {copied === "FREEZE" ? <Check className="size-4" /> : <Copy className="size-4" />}
+          {copied === "FREEZE" ? "Copied" : "Copy freeze draft"}
         </Button>
         <Badge
           variant="outline"

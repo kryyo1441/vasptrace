@@ -119,7 +119,14 @@ export function WatchesPanel() {
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         {watches.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No watches yet.</p>
+          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border py-10 text-center">
+            <Bell className="size-8 text-muted-foreground/50" aria-hidden="true" />
+            <p className="text-sm font-medium">No watches yet</p>
+            <p className="max-w-sm text-xs text-muted-foreground">
+              Add a deposit address above to get alerted the moment it sends anywhere new — most useful right
+              after routing a disclosure request, while the funds may still be there.
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-3">
             {watches.map((w) => (

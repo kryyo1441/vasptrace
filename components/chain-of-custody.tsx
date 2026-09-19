@@ -13,11 +13,14 @@ const ACTION_LABEL: Record<string, string> = {
   VIEW_CASE: "Viewed case",
   DOWNLOAD_REPORT: "Downloaded PDF report",
   ROUTE_SAHYOG: "Routed disclosure request",
+  ROUTE_FREEZE: "Routed freeze request",
+  DELETE_CASE: "Deleted case",
   VASP_RESPONSE: "Recorded VASP response",
   DRAFT_NARRATIVE: "Drafted case narrative",
   WATCH_ADD: "Added address watch",
   WATCH_CHECK: "Checked address watch",
   SANCTIONS_SYNC: "Synced OFAC sanctions list",
+  TERROR_SYNC: "Synced terror-financing list",
 };
 
 interface Event {

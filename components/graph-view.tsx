@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { TraceGraph, TraceNode, TypologyFlag } from "@/lib/tracers/types";
+import type { LinkedCases } from "@/lib/linking";
 import { TYPOLOGY_LABEL } from "@/lib/typology";
 import { assetTotalsLabel, edgeAmountLabel, formatAssetValue, isContractCall } from "@/lib/format";
 import {
@@ -13,7 +14,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Link2, ShieldCheck } from "lucide-react";
 
 // react-force-graph-2d touches window/canvas at import time — must load client-only.
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
@@ -34,6 +35,7 @@ const NODE_COLOR: Record<TraceNode["kind"], string> = {
   BRIDGE: "#0d9488", // teal — was #2563eb, collided with the new --primary
   UNKNOWN: "#6b7280",
   SANCTIONED: "#991b1b", // dark red, distinct from DARKNET/RANSOMWARE's #7f1d1d
+  TERROR_FINANCING: "#450a0a", // near-black red — the most severe kind on the canvas
 };
 
 const NODE_KIND_LABEL: Record<TraceNode["kind"], string> = {
@@ -46,12 +48,17 @@ const NODE_KIND_LABEL: Record<TraceNode["kind"], string> = {
   BRIDGE: "Bridge",
   UNKNOWN: "Unknown",
   SANCTIONED: "OFAC sanctioned",
+  TERROR_FINANCING: "Terror financing",
 };
 
 // Contract-call edges: deliberately the dimmest thing on the canvas. They
 // are real observations but not value flow, so they must not compete with
 // the money path for attention (ROADMAP.md item 0).
 const CONTRACT_CALL_COLOR = "#a78bfa"; // muted violet
+
+// Cross-case link ring (lib/linking.ts) — cyan, outside every node-kind and
+// flag hue, drawn dashed so it reads as "also elsewhere", not as a kind.
+const LINK_RING_COLOR = "#06b6d4";
 
 // Distinct from NODE_COLOR so a flagged edge reads as its own signal even
 // when it touches an already-colored node (e.g. an edge into a mixer).
@@ -76,7 +83,7 @@ type GraphLink = { source: string; target: string; label: string; flags: Typolog
 // the physics simulation still settles them and drag/zoom keep working.
 const RING_SPACING = 130;
 
-export function GraphView({ graph }: { graph: TraceGraph }) {
+export function GraphView({ graph, linked = {} }: { graph: TraceGraph; linked?: LinkedCases }) {
   const [selected, setSelected] = useState<TraceNode | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ForceGraphMethods generic doesn't survive next/dynamic
   const fgRef = useRef<any>(null);
@@ -165,6 +172,7 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
       "INTERMEDIARY",
       "MIXER",
       "BRIDGE",
+      "TERROR_FINANCING",
       "SANCTIONED",
       "DARKNET",
       "RANSOMWARE",
@@ -182,6 +190,42 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
     if (node.kind === "SUSPECT") return 9;
     if (node.typologyFlags.length > 0) return 7;
     return 5.5;
+  }
+
+  // Click target, not paint radius. It has to cover everything drawn around
+  // the node — the cyan link ring sits at r+5 and the flag ring at r+2.5, and
+  // both used to fall outside a hit area of r+2, so clicking the ring on a
+  // linked node did nothing. Floor of 8 screen px so a zoomed-out node is
+  // still hittable with a mouse.
+  function hitRadius(node: GraphNode, globalScale: number) {
+    const r = nodeRadius(node);
+    const outer = linked[node.address] ? r + 6 : node.typologyFlags.length > 0 ? r + 4 : r + 2;
+    return Math.max(outer, 8 / globalScale);
+  }
+
+  // The on-canvas name chip, or null when it isn't drawn. Shared by the paint
+  // and the hit area so a click on the name lands on the node it names.
+  // Sets ctx.font as a side effect — measureText needs it.
+  function labelBox(node: GraphNode, ctx: CanvasRenderingContext2D, globalScale: number) {
+    // Only for nodes that carry meaning: the suspect root and anything with a
+    // real entity name. Labelling every anonymous intermediary was a real bug
+    // on ETH traces (40+ overlapping chips); their address is one hover or
+    // click away. Skipped while zoomed far out.
+    if (globalScale <= 1.1 || (node.kind !== "SUSPECT" && !node.entityName)) return null;
+    const r = nodeRadius(node);
+    const label = node.entityName ?? short(node.address);
+    const fontSize = Math.max(10 / globalScale, 3.4);
+    ctx.font = `${node.kind === "SUSPECT" ? "600" : "400"} ${fontSize}px system-ui, sans-serif`;
+    // The radial layout puts depth-1 nodes level with the suspect, so the
+    // suspect's label goes above to avoid colliding with its neighbours' —
+    // a placement heuristic, not full collision avoidance.
+    const above = node.kind === "SUSPECT";
+    const y = above ? node.y - r - 2 : node.y + r + 2;
+    const padX = fontSize * 0.4;
+    const padY = fontSize * 0.25;
+    const boxW = ctx.measureText(label).width + padX * 2;
+    const boxH = fontSize + padY * 2;
+    return { label, fontSize, boxX: node.x - boxW / 2, boxY: above ? y - boxH : y, boxW, boxH };
   }
 
   return (
@@ -218,6 +262,18 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
             ctx.fill();
           }
 
+          // Dashed cyan outer ring: this address also appears in another of
+          // the viewer's cases.
+          if (linked[node.address]) {
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, r + 5, 0, 2 * Math.PI);
+            ctx.setLineDash([2, 1.5]);
+            ctx.strokeStyle = LINK_RING_COLOR;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+
           // A thin ring in the flag color reads as "this node was flagged"
           // even before hover, distinct from the fill (which is node kind).
           if (node.typologyFlags.length > 0) {
@@ -236,64 +292,32 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
           ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
           ctx.stroke();
 
-          // On-canvas label — only for nodes that actually carry meaning:
-          // the suspect root (the anchor of the whole trace) and anything
-          // with a real entity name ("Binance 14", "Tornado Cash"). An
-          // anonymous intermediary's shortened hex tells a viewer nothing
-          // at a glance, and labelling all of them was the actual bug on
-          // ETH traces: 40+ chips overlapping into a ragged mess. Their
-          // full address is still one hover (tooltip) or one click (detail
-          // sheet) away. Also skipped while zoomed far out.
-          const labelWorthShowing = node.kind === "SUSPECT" || !!node.entityName;
-          if (globalScale > 1.1 && labelWorthShowing) {
-            const label = node.entityName ?? short(node.address);
-            const fontSize = Math.max(10 / globalScale, 3.4);
-            ctx.font = `${node.kind === "SUSPECT" ? "600" : "400"} ${fontSize}px system-ui, sans-serif`;
-            ctx.textAlign = "center";
-            // The radial layout puts every depth-1 node level with the
-            // suspect (angle 0/π when there are 2 siblings) — a below-node
-            // label for the suspect then collides with its own immediate
-            // neighbor's label. Drawing the suspect's label above instead
-            // sidesteps the single most common case (small trace, few
-            // depth-1 nodes); it's a placement heuristic, not full
-            // collision avoidance across the whole graph.
-            const above = node.kind === "SUSPECT";
-            const y = above ? node.y - r - 2 : node.y + r + 2;
-
-            // Solid rounded chip behind the text, NOT ctx.strokeText.
-            // strokeText traces each glyph's own outline, so a halo thick
-            // enough to be readable spikes out at sharp letter corners and
-            // blobs together around the "…" in a shortened address — the
-            // ragged look in the reported bug. A measured rect is uniform
-            // by construction and cheaper to draw.
-            const padX = fontSize * 0.4;
-            const padY = fontSize * 0.25;
-            const textW = ctx.measureText(label).width;
-            const boxW = textW + padX * 2;
-            const boxH = fontSize + padY * 2;
-            const boxX = node.x - boxW / 2;
-            const boxY = above ? y - boxH : y;
-
+          // Solid rounded chip behind the text, not ctx.strokeText — a glyph
+          // outline halo spikes at sharp corners and blobs around the "…".
+          const box = labelBox(node, ctx, globalScale);
+          if (box) {
             ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
             ctx.beginPath();
             if (typeof ctx.roundRect === "function") {
-              ctx.roundRect(boxX, boxY, boxW, boxH, Math.min(3, fontSize * 0.35));
+              ctx.roundRect(box.boxX, box.boxY, box.boxW, box.boxH, Math.min(3, box.fontSize * 0.35));
             } else {
-              ctx.rect(boxX, boxY, boxW, boxH);
+              ctx.rect(box.boxX, box.boxY, box.boxW, box.boxH);
             }
             ctx.fill();
-
             ctx.fillStyle = "#1e293b";
+            ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.fillText(label, node.x, boxY + boxH / 2);
+            ctx.fillText(box.label, node.x, box.boxY + box.boxH / 2);
           }
         }}
-        nodePointerAreaPaint={(n, color, ctx) => {
+        nodePointerAreaPaint={(n, color, ctx, globalScale) => {
           const node = n as GraphNode;
           ctx.fillStyle = color;
           ctx.beginPath();
-          ctx.arc(node.x, node.y, nodeRadius(node) + 2, 0, 2 * Math.PI);
+          ctx.arc(node.x, node.y, hitRadius(node, globalScale), 0, 2 * Math.PI);
           ctx.fill();
+          const box = labelBox(node, ctx, globalScale);
+          if (box) ctx.fillRect(box.boxX, box.boxY, box.boxW, box.boxH);
         }}
         // nodeCanvasObject above only replaces the paint step — the force
         // simulation still reads nodeVal for collision size, so a bigger
@@ -330,6 +354,14 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
         linkDirectionalParticleSpeed={0.004}
         onNodeClick={(n) => setSelected(n as GraphNode)}
         onEngineStop={() => fgRef.current?.zoomToFit(400, 60)}
+        // force-graph resolves clicks from a hidden hit-map canvas it only
+        // repaints every 800ms. With the default 15s cooldown, nodes kept
+        // drifting long after load, so the hit map lagged where they were
+        // drawn and clicks on moving nodes missed (or hit a neighbour) —
+        // "some nodes are clickable, some aren't". Settle most of the layout
+        // before the first paint, and stop the engine quickly after.
+        warmupTicks={80}
+        cooldownTime={2000}
         height={500}
       />
 
@@ -345,6 +377,12 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
         {/* Only when this trace actually has one — a dashed-line key on a
             graph with no contract-call edges is noise, same rule as the
             node kinds above. */}
+        {Object.keys(linked).length > 0 && (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2.5 shrink-0 rounded-full border border-dashed" style={{ borderColor: LINK_RING_COLOR }} />
+            Also in your other cases
+          </span>
+        )}
         {hasContractCall && (
           <span className="inline-flex items-center gap-1.5">
             <span
@@ -415,6 +453,24 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
                 <div className="text-sm">{formatAssetValue(selected.totalReceivedBaseUnits, undefined, graph.chain)}</div>
               </div>
             )}
+            {selected && linked[selected.address] && (
+              <div>
+                <div className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <Link2 className="size-3.5" />
+                  Also appears in {linked[selected.address].length} other case{linked[selected.address].length === 1 ? "" : "s"}
+                </div>
+                <ul className="mt-1 flex flex-col gap-0.5 text-xs">
+                  {linked[selected.address].map((l) => (
+                    <li key={l.caseId}>
+                      <a href={`/cases/${l.caseId}`} className="font-mono underline underline-offset-2 wrap-anywhere">
+                        {l.rootAddress}
+                      </a>{" "}
+                      <span className="text-muted-foreground">· {new Date(l.createdAt).toLocaleDateString()}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {selected?.stopReason && (
               <div>
                 <div className="text-xs text-muted-foreground">Trace stopped here</div>
@@ -439,6 +495,23 @@ export function GraphView({ graph }: { graph: TraceGraph }) {
           </div>
         </SheetContent>
       </Sheet>
+    </div>
+  );
+}
+
+// One-line summary above the graph: how many of this trace's addresses tie it
+// to the viewer's other cases, and how many distinct cases that is.
+export function LinkedCasesSummary({ linked }: { linked: LinkedCases }) {
+  const addresses = Object.keys(linked).length;
+  if (addresses === 0) return null;
+  const cases = new Set(Object.values(linked).flatMap((ls) => ls.map((l) => l.caseId))).size;
+  return (
+    <div className="mb-3 flex items-start gap-2 rounded-xl border border-cyan-600/30 bg-cyan-500/10 p-3 text-xs text-cyan-800 dark:text-cyan-300">
+      <Link2 className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+      <span>
+        {addresses} address{addresses === 1 ? "" : "es"} in this trace also appear{addresses === 1 ? "s" : ""} in {cases} of your
+        other case{cases === 1 ? "" : "s"} — possibly the same operator. Ringed in cyan on the graph; click one for the cases.
+      </span>
     </div>
   );
 }
